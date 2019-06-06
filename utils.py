@@ -29,14 +29,15 @@ def read_json(filename):
 
 def read_groundtruth(image_ids):
     base_dir = '/atlas/u/buzkent/Single_Shot_Object_Detector/prepare_dataset/train_chips_xview/'
-    object_interest = 73
+    object_interest = [11, 12, 13, 15]
     patch_groundtruth = torch.zeros((len(image_ids), 16)).cuda()
     for index, img_id in enumerate(image_ids):
         counter = 0
         for xind in range(4):
             for yind in range(4):
                 temp = read_json('{}{}_{}_{}{}'.format(base_dir, img_id, str(xind), str(yind), '.json'))
-                if object_interest in temp:
+                intersection = [i for i in object_interest if i in temp]
+                if intersection:
                     patch_groundtruth[index, counter] = 1
                 counter += 1
     return patch_groundtruth
