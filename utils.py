@@ -29,7 +29,7 @@ def read_json(filename):
 
 def read_groundtruth(image_ids):
     base_dir = '/atlas/u/buzkent/Single_Shot_Object_Detector/prepare_dataset/train_chips_xview/'
-    object_interest = [11, 12, 13, 15]
+    object_interest = [73, 74, 76, 79, 77, 71, 72] #[11, 12, 13, 15]
     patch_groundtruth = torch.zeros((len(image_ids), 16)).cuda()
     for index, img_id in enumerate(image_ids):
         counter = 0
@@ -57,12 +57,18 @@ def performance_stats(policies, rewards):
 
     return reward, num_unique_policy, variance, policy_set
 
-def compute_reward(patch_groundtruth, policy):
+def compute_reward(patch_groundtruth, policy, alpha=0.1, beta=0.1):
     # Reward function favors policies that drops patches only if the classifier
     # successfully categorizes the image
+    reward_acc = ((patch_groundtruth == policy).float() * patch_groundtruth).sum(dim=1) / patch_groundtruth.sum(dim=1)
+    reward_acc[reward_acc!=reward_acc] = 0
+    #reward_fcost = alpha * (policy.size(1) - policy.sum(dim=1)) / policy.size(1)
+    #reward_rtcost = beta * (policy.size(1) - policy.sum(dim=1)) / policy.size(1)
+    #reward = reward_acc + reward_fcost + reward_rtcost
+
     reward = (patch_groundtruth == policy).sum(dim=1).float() / policy.size(1)
     reward = reward.unsqueeze(1)
-    return reward.float()
+    return reward.float(), reward_acc
 
 def get_transforms(rnet, dset):
 
@@ -82,6 +88,32 @@ def get_transforms(rnet, dset):
     ])
 
     return transform_train, transform_test
+
+def agent_chosen_input(input_org, policy, mappings, interval):
+    """ Make the inputs variable size images using the determined policy
+        The high resolution images (32x32 C10) will be changed to low resolution images (24x24 C10)
+        if the action is set to 0.
+    """
+    input_full = input_org.clone()
+    sampled_img = torch.zeros([input_org.shape[0], input_org.shape[1], input_org.shape[2], input_org.shape[3]])
+    for pl_ind in range(policy.shape[1]):
+        mask = (policy[:, pl_ind] == 1).cpu()
+        sampled_img[:, :, mappings[pl_ind][0]:mappings[pl_ind][0]+interval, mappings[pl_ind][1]:mappings[pl_ind][1]+interval] = input_full[:, :, mappings[pl_ind][0]:mappings[pl_ind][0]+interval, mappings[pl_ind][1]:mappings[pl_ind][1]+interval]
+        sampled_img[:, :, mappings[pl_ind][0]:mappings[pl_ind][0]+interval, mappings[pl_ind][1]:mappings[pl_ind][1]+interval] *= mask.unsqueeze(1).unsqueeze(1).unsqueeze(1).float()
+    input_org = sampled_img
+
+    return input_org.cuda()
+
+def action_space_model(dset):
+    img_size = 448
+    interval = 112
+    # Model the action space by dividing the image space into equal size patches
+    mappings = []
+    for cl in range(0, img_size, interval):
+        for rw in range(0, img_size, interval):
+            mappings.append([cl, rw])
+
+    return mappings, img_size, interval
 
 # Pick from the datasets available and the hundreds of models we have lying around depending on the requirements.
 def get_dataset(model, root='data/'):

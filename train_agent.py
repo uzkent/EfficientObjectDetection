@@ -82,8 +82,8 @@ def train(epoch):
         patch_groundtruth = utils.read_groundtruth(targets)
 
         # Find the reward for baseline and sampled policy
-        reward_map = utils.compute_reward(patch_groundtruth, policy_map.data)
-        reward_sample = utils.compute_reward(patch_groundtruth, policy_sample.data)
+        reward_map, _ = utils.compute_reward(patch_groundtruth, policy_map.data)
+        reward_sample, _ = utils.compute_reward(patch_groundtruth, policy_sample.data)
         advantage = reward_sample.cuda().float() - reward_map.cuda().float()
 
         # Find the loss for only the policy network
@@ -113,10 +113,11 @@ def test(epoch):
     # Test the policy network and the high resolution classifier
     agent.eval()
 
-    matches, rewards, policies = [], [], []
+    matches, rewards, reward_accuracies, policies = [], [], [], []
     for batch_idx, (inputs, targets) in tqdm.tqdm(enumerate(testloader), total=len(testloader)):
 
         inputs = Variable(inputs, volatile=True)
+        inputs_dem = inputs.clone()
         if not args.parallel:
             inputs = inputs.cuda()
 
@@ -133,16 +134,19 @@ def test(epoch):
         patch_groundtruth = utils.read_groundtruth(targets)
 
         # Find the reward for baseline and sampled policy
-        reward = utils.compute_reward(patch_groundtruth, policy.data)
+        reward, reward_acc = utils.compute_reward(patch_groundtruth, policy.data)
 
         rewards.append(reward)
+        reward_accuracies.append(reward_acc)
         policies.append(policy.data)
 
+    accuracy = torch.stack(reward_accuracies).mean()
     reward, sparsity, variance, policy_set = utils.performance_stats(policies, rewards)
 
-    print 'Test - Rw: %.2E | S: %.3f | V: %.3f | #: %d'%(reward, sparsity, variance, len(policy_set))
+    print 'Test - Acc: %.3f | Rw: %.2E | S: %.3f | V: %.3f | #: %d'%(accuracy, reward, sparsity, variance, len(policy_set))
 
     log_value('test_reward', reward, epoch)
+    log_value('test_accuracy', accuracy, epoch)
     log_value('test_sparsity', sparsity, epoch)
     log_value('test_variance', variance, epoch)
     log_value('test_unique_policies', len(policy_set), epoch)
@@ -161,7 +165,7 @@ def test(epoch):
 #--------------------------------------------------------------------------------------------------------#
 trainset, testset = utils.get_dataset(args.model, args.data_dir)
 trainloader = torchdata.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=16)
-testloader = torchdata.DataLoader(testset, batch_size=43, shuffle=False, num_workers=0)
+testloader = torchdata.DataLoader(testset, batch_size=10, shuffle=True, num_workers=0)
 agent = utils.get_model(args.model)
 
 # ------- PatchDrop Action Space for fMoW -----------------------
