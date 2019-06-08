@@ -35,7 +35,6 @@ import argparse
 parser = argparse.ArgumentParser(description='PatchDrop Pre-Training')
 parser.add_argument('--lr', type=float, default=1e-3, help='learning rate')
 parser.add_argument('--model', default='R32_C10', help='R<depth>_<dataset> see utils.py for a list of configurations')
-parser.add_argument('--ckpt_hr_cl', help='checkpoint directory for the high resolution classifier')
 parser.add_argument('--data_dir', default='data/', help='data directory')
 parser.add_argument('--load', default=None, help='checkpoint to load agent from')
 parser.add_argument('--cv_dir', default='cv/tmp/', help='checkpoint directory (models and logs are saved here)')
@@ -117,7 +116,6 @@ def test(epoch):
     for batch_idx, (inputs, targets) in tqdm.tqdm(enumerate(testloader), total=len(testloader)):
 
         inputs = Variable(inputs, volatile=True)
-        inputs_dem = inputs.clone()
         if not args.parallel:
             inputs = inputs.cuda()
 
@@ -159,16 +157,15 @@ def test(epoch):
       'epoch': epoch,
       'reward': reward,
     }
-
     torch.save(state, args.cv_dir+'/ckpt_E_%d_R_%.2E'%(epoch, reward))
 
 #--------------------------------------------------------------------------------------------------------#
 trainset, testset = utils.get_dataset(args.model, args.data_dir)
 trainloader = torchdata.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=16)
-testloader = torchdata.DataLoader(testset, batch_size=10, shuffle=True, num_workers=0)
+testloader = torchdata.DataLoader(testset, batch_size=146, shuffle=False, num_workers=0)
 agent = utils.get_model(args.model)
 
-# ------- PatchDrop Action Space for fMoW -----------------------
+# ---- Load the pre-trained model ----------------------
 start_epoch = 0
 if args.load is not None:
     checkpoint = torch.load(args.load)

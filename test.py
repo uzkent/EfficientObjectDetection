@@ -87,7 +87,7 @@ agent = utils.get_model(args.model)
 num_patches = 16 # Fixed in the paper, but can be changed
 mappings, img_size, interval = utils.action_space_model(args.model.split('_')[1])
 
-# ------- PatchDrop Action Space for fMoW -----------------------
+# ---------------- Load the trained model ---------------------
 if args.load is not None:
     checkpoint = torch.load(args.load)
     agent.load_state_dict(checkpoint['agent'])
