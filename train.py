@@ -26,6 +26,7 @@ import numpy as np
 import pdb
 import tqdm
 import utils
+import utils_detector
 import torch.optim as optim
 from torch.distributions import Multinomial, Bernoulli
 import torch.backends.cudnn as cudnn
@@ -52,10 +53,7 @@ if not os.path.exists(args.cv_dir):
 utils.save_args(__file__, args)
 
 def train(epoch):
-    # This steps trains the policy network and high resolution classifier jointly
-    # rnet represents the high resolution classifier
-    # rnet_lr represents the low resolution classifier
-
+    # This steps trains the policy network
     agent.train()
     matches, rewards, rewards_baseline, policies = [], [], [], []
     for batch_idx, (inputs, targets) in tqdm.tqdm(enumerate(trainloader), total=len(trainloader)):
@@ -78,11 +76,11 @@ def train(epoch):
         policy_map = Variable(policy_map)
 
         # Agent sampled high resolution images
-        patch_groundtruth = utils.read_groundtruth(targets)
+        offset_fd, offset_cd = utils.read_offsets(targets)
 
         # Find the reward for baseline and sampled policy
-        reward_map, _ = utils.compute_reward(patch_groundtruth, policy_map.data)
-        reward_sample, _ = utils.compute_reward(patch_groundtruth, policy_sample.data)
+        reward_map, _ = utils.compute_reward(offset_fd, offset_cd, policy_map.data)
+        reward_sample, _ = utils.compute_reward(offset_fd, offset_cd, policy_sample.data)
         advantage = reward_sample.cuda().float() - reward_map.cuda().float()
 
         # Find the loss for only the policy network
@@ -109,10 +107,10 @@ def train(epoch):
     log_value('train_unique_policies', len(policy_set), epoch)
 
 def test(epoch):
-    # Test the policy network and the high resolution classifier
+    # Test the policy network
     agent.eval()
 
-    matches, rewards, reward_accuracies, policies = [], [], [], []
+    matches, rewards, sample_metrics, policies = [], [], [], [], []
     for batch_idx, (inputs, targets) in tqdm.tqdm(enumerate(testloader), total=len(testloader)):
 
         inputs = Variable(inputs, volatile=True)
@@ -129,22 +127,28 @@ def test(epoch):
         policy = Variable(policy)
 
         # Agent sampled high resolution images
-        patch_groundtruth = utils.read_groundtruth(targets)
+        offset_fd, offset_cd = utils.read_offsets(targets)
 
         # Find the reward for baseline and sampled policy
-        reward, reward_acc = utils.compute_reward(patch_groundtruth, policy.data)
+        reward, reward_acc = utils.compute_reward(offset_fd, offset_cd, policy.data)
+
+        # Compute the Batch-wise metrics
+        # [TODO] : Get the Outputs and Targets
+        sample_metrics += utils_detector.get_batch_statistics(outputs, targets, 0.5)
 
         rewards.append(reward)
-        reward_accuracies.append(reward_acc)
         policies.append(policy.data)
 
-    accuracy = torch.stack(reward_accuracies).mean()
+    # Compute the Precision and Recall Performance of the Agent and Detectors
+    true_positives, pred_scores, pred_labels = [np.concatenate(x, 0) for x in list(zip(*sample_metrics))]
+    precision, recall, AP, f1, ap_class = utils_detector.ap_per_class(true_positives, pred_scores, pred_labels, labels)
+
     reward, sparsity, variance, policy_set = utils.performance_stats(policies, rewards)
 
-    print 'Test - Acc: %.3f | Rw: %.2E | S: %.3f | V: %.3f | #: %d'%(accuracy, reward, sparsity, variance, len(policy_set))
+    print 'Test - Acc: %.3f | Rw: %.2E | S: %.3f | V: %.3f | #: %d'%(recall, reward, sparsity, variance, len(policy_set))
 
     log_value('test_reward', reward, epoch)
-    log_value('test_accuracy', accuracy, epoch)
+    log_value('test_accuracy', recall, epoch)
     log_value('test_sparsity', sparsity, epoch)
     log_value('test_variance', variance, epoch)
     log_value('test_unique_policies', len(policy_set), epoch)
@@ -186,5 +190,5 @@ optimizer = optim.Adam(agent.parameters(), lr=args.lr)
 configure(args.cv_dir+'/log', flush_secs=5)
 for epoch in range(start_epoch, start_epoch+args.max_epochs+1):
     train(epoch)
-    if epoch % 10 == 0:
-        test(epoch)
+    #if epoch % 10 == 0:
+    #    test(epoch)

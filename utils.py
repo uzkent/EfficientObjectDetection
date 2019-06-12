@@ -42,6 +42,24 @@ def read_groundtruth(image_ids):
                 counter += 1
     return patch_groundtruth
 
+def read_offsets(image_ids):
+    base_dir_fd = '/atlas/u/buzkent/EfficientObjectDetection/data/xView/reward_fd/'
+    base_dir_cd = '/atlas/u/buzkent/EfficientObjectDetection/data/xView/reward_cd/'
+    offset_fd = torch.zeros((len(image_ids), 36)).cuda()
+    offset_cd = torch.zeros((len(image_ids), 36)).cuda()
+    for index, img_id in enumerate(image_ids):
+        offset_fd[index, :] = torch.from_numpy(np.loadtxt('{}{}'.format(base_dir_fd, img_id)).flatten())
+        offset_cd[index, :] = torch.from_numpy(np.loadtxt('{}{}'.format(base_dir_cd, img_id)).flatten())
+
+    return offset_fd, offset_cd
+
+def read_predictions(image_ids):
+    base_dir = '/atlas/u/buzkent/Single_Shot_Object_Detector/prepare_dataset/train_chips_xview/'
+    object_interest = [48]
+
+
+    return patch_groundtruth
+
 def performance_stats(policies, rewards):
     # Print the performace metrics including the average reward, average number
     # and variance of sampled num_patches, and number of unique policies
@@ -57,18 +75,13 @@ def performance_stats(policies, rewards):
 
     return reward, num_unique_policy, variance, policy_set
 
-def compute_reward(patch_groundtruth, policy, alpha=0.1, beta=0.1):
+def compute_reward(offset_fd, offset_cd, policy, alpha=0.1, beta=0.1):
     # Reward function favors policies that drops patches only if the classifier
     # successfully categorizes the image
-    reward_acc = ((patch_groundtruth == policy).float() * patch_groundtruth).sum(dim=1) / patch_groundtruth.sum(dim=1)
-    reward_acc[reward_acc!=reward_acc] = 0
-    #reward_fcost = alpha * (policy.size(1) - policy.sum(dim=1)) / policy.size(1)
-    #reward_rtcost = beta * (policy.size(1) - policy.sum(dim=1)) / policy.size(1)
-    #reward = reward_acc + reward_fcost + reward_rtcost
-
-    reward = (patch_groundtruth == policy).sum(dim=1).float() / policy.size(1)
-    reward = reward.unsqueeze(1)
-    return reward.float(), reward_acc
+    reward_patch = (offset_cd - offset_fd) * policy + -(offset_cd - offset_fd) * (1-policy)
+    reward_img = reward_patch.sum(dim=1)
+    reward = reward_img.unsqueeze(1)
+    return reward.float(), reward
 
 def get_transforms(rnet, dset):
 
@@ -135,6 +148,6 @@ def get_model(model):
     agent = torchmodels.resnet34(pretrained=True)
     set_parameter_requires_grad(agent, False)
     num_ftrs = agent.fc.in_features
-    agent.fc = torch.nn.Linear(num_ftrs, 16)
+    agent.fc = torch.nn.Linear(num_ftrs, 36)
 
     return agent
