@@ -5,12 +5,14 @@ import torchvision.transforms as transforms
 import torchvision.datasets as torchdata
 import torchvision.models as torchmodels
 import numpy as np
+import pandas as pd
 import pdb
 import shutil
 import json
 from random import randint, sample
 
 from xView_dataloader import CustomDatasetFromImages
+mappings_labels = pd.read_csv('/atlas/u/buzkent/PyTorch-YOLOv3/data/custom/mapping_xview_labels.csv')
 
 def save_args(__file__, args):
     shutil.copy(os.path.basename(__file__), args.cv_dir)
@@ -21,11 +23,45 @@ def read_json(filename):
     with open(filename) as dt:
         data = json.load(dt)
 
-    labels = []
-    for dt in data:
-        labels.append(dt[-1])
+    return data
 
-    return labels
+def get_detected_boxes(policy, file_dirs):
+    base_dir_fd = '/atlas/u/buzkent/PyTorch-YOLOv3/data/custom/fine_dt_output/'
+    base_dir_cd = '/atlas/u/buzkent/PyTorch-YOLOv3/data/custom/fine_dt_output_ds/'
+    base_dir_gt = '/atlas/u/buzkent/Single_Shot_Object_Detector/prepare_dataset/train_chips_xview/'
+    outputs_all, targets = [], np.zeros((1, 6))
+    policy[:, :] = 0
+    for index, file_dir in enumerate(file_dirs):
+         counter, outputs_img = 0, np.zeros((1,7))
+         for xind in range(6):
+             for yind in range(6):
+                 file_dir_st = str(file_dir).split(')')[0].split('(')[1]
+                 # ---------------- Read Detections -------------------------------
+                 if policy[index, counter] == 1:
+                     preds_dir = '{}{}_{}_{}'.format(base_dir_fd, file_dir_st, str(xind), str(yind))
+                     if os.path.exists(preds_dir):
+                         outputs_img = np.vstack((outputs_img, np.loadtxt(preds_dir)))
+                 else:
+                     preds_dir = '{}{}_{}_{}_ds'.format(base_dir_cd, file_dir_st, str(xind), str(yind))
+                     if os.path.exists(preds_dir):
+                         outputs_img = np.vstack((outputs_img, np.loadtxt(preds_dir)))
+                 # ----------------------------------------------------------------
+                 # ---------------- Read Ground Truth -----------------------------
+                 gt = read_json('{}{}_{}_{}.json'.format(base_dir_gt, file_dir_st, str(xind), str(yind)))
+                 if gt:
+                     for gt_ind in gt:
+                         try:
+                             targets = np.vstack((targets, [index, mappings_labels[mappings_labels['labels']==gt_ind[1]].index.item(),
+                                        gt_ind[0][0], gt_ind[0][1], gt_ind[0][2], gt_ind[0][3]]))
+                         except Exception as error:
+                             print(error)
+                 # ----------------------------------------------------------------
+                 counter += 1
+         outputs_all.append(torch.from_numpy(outputs_img))
+
+    # Project the ground truth back to the image domain
+    targets[:,2:] = 416*targets[:,2:]
+    return outputs_all, torch.from_numpy(np.delete(targets, 0, 0)), targets[:,1]
 
 def read_groundtruth(image_ids):
     base_dir = '/atlas/u/buzkent/Single_Shot_Object_Detector/prepare_dataset/train_chips_xview/'
@@ -52,13 +88,6 @@ def read_offsets(image_ids):
         offset_cd[index, :] = torch.from_numpy(np.loadtxt('{}{}'.format(base_dir_cd, img_id)).flatten())
 
     return offset_fd, offset_cd
-
-def read_predictions(image_ids):
-    base_dir = '/atlas/u/buzkent/Single_Shot_Object_Detector/prepare_dataset/train_chips_xview/'
-    object_interest = [48]
-
-
-    return patch_groundtruth
 
 def performance_stats(policies, rewards):
     # Print the performace metrics including the average reward, average number

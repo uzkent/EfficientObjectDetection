@@ -110,7 +110,7 @@ def test(epoch):
     # Test the policy network
     agent.eval()
 
-    matches, rewards, sample_metrics, policies = [], [], [], [], []
+    matches, rewards, sample_metrics, policies, set_labels = [], [], [], [], []
     for batch_idx, (inputs, targets) in tqdm.tqdm(enumerate(testloader), total=len(testloader)):
 
         inputs = Variable(inputs, volatile=True)
@@ -132,23 +132,29 @@ def test(epoch):
         # Find the reward for baseline and sampled policy
         reward, reward_acc = utils.compute_reward(offset_fd, offset_cd, policy.data)
 
+        # Read the Agent Chosen Detections and Targets
+
         # Compute the Batch-wise metrics
         # [TODO] : Get the Outputs and Targets
+        outputs, targets, batch_labels = utils.get_detected_boxes(policy, targets)
         sample_metrics += utils_detector.get_batch_statistics(outputs, targets, 0.5)
 
+        set_labels += batch_labels.tolist()
         rewards.append(reward)
         policies.append(policy.data)
 
     # Compute the Precision and Recall Performance of the Agent and Detectors
     true_positives, pred_scores, pred_labels = [np.concatenate(x, 0) for x in list(zip(*sample_metrics))]
-    precision, recall, AP, f1, ap_class = utils_detector.ap_per_class(true_positives, pred_scores, pred_labels, labels)
+    precision, recall, AP, f1, ap_class = utils_detector.ap_per_class(true_positives, pred_scores, pred_labels, set_labels)
 
+    print 'Test - AP: %.2f | AR : %.2f'%(AP[47], recall[47])
     reward, sparsity, variance, policy_set = utils.performance_stats(policies, rewards)
 
-    print 'Test - Acc: %.3f | Rw: %.2E | S: %.3f | V: %.3f | #: %d'%(recall, reward, sparsity, variance, len(policy_set))
+    print 'Test - Rw: %.2E | S: %.3f | V: %.3f | #: %d'%(reward, sparsity, variance, len(policy_set))
 
     log_value('test_reward', reward, epoch)
-    log_value('test_accuracy', recall, epoch)
+    log_value('test_AP', AP[47], epoch)
+    log_value('test_AR', recall[47], epoch)
     log_value('test_sparsity', sparsity, epoch)
     log_value('test_variance', variance, epoch)
     log_value('test_unique_policies', len(policy_set), epoch)
@@ -166,7 +172,7 @@ def test(epoch):
 #--------------------------------------------------------------------------------------------------------#
 trainset, testset = utils.get_dataset(args.model, args.data_dir)
 trainloader = torchdata.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=16)
-testloader = torchdata.DataLoader(testset, batch_size=146, shuffle=False, num_workers=0)
+testloader = torchdata.DataLoader(testset, batch_size=10, shuffle=False, num_workers=0)
 agent = utils.get_model(args.model)
 
 # ---- Load the pre-trained model ----------------------
@@ -189,6 +195,6 @@ optimizer = optim.Adam(agent.parameters(), lr=args.lr)
 # Save the args to the checkpoint directory
 configure(args.cv_dir+'/log', flush_secs=5)
 for epoch in range(start_epoch, start_epoch+args.max_epochs+1):
-    train(epoch)
-    #if epoch % 10 == 0:
-    #    test(epoch)
+    # train(epoch)
+    if epoch % 10 == 0:
+        test(epoch)
