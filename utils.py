@@ -9,10 +9,17 @@ import pandas as pd
 import pdb
 import shutil
 import json
-from random import randint, sample
+import utils_detector
 
+from random import randint, sample
 from xView_dataloader import CustomDatasetFromImages
 mappings_labels = pd.read_csv('/atlas/u/buzkent/PyTorch-YOLOv3/data/custom/mapping_xview_labels.csv')
+base_dir_fd = '/atlas/u/buzkent/PyTorch-YOLOv3/data/custom/fd_output_txt/'
+base_dir_cd = '/atlas/u/buzkent/PyTorch-YOLOv3/data/custom/cd_output_txt/'
+base_dir_gt = '/atlas/u/buzkent/Single_Shot_Object_Detector/prepare_dataset/train_chips_xview/'
+num_actions = 16
+num_windows = 4
+img_size = 416
 
 def save_args(__file__, args):
     shutil.copy(os.path.basename(__file__), args.cv_dir)
@@ -22,20 +29,15 @@ def save_args(__file__, args):
 def read_json(filename):
     with open(filename) as dt:
         data = json.load(dt)
-
     return data
 
 def get_detected_boxes(policy, file_dirs):
-    base_dir_fd = '/atlas/u/buzkent/PyTorch-YOLOv3/data/custom/fine_dt_output/'
-    base_dir_cd = '/atlas/u/buzkent/PyTorch-YOLOv3/data/custom/fine_dt_output_ds/'
-    base_dir_gt = '/atlas/u/buzkent/Single_Shot_Object_Detector/prepare_dataset/train_chips_xview/'
     outputs_all, targets = [], np.zeros((1, 6))
-    policy[:, :] = 0
     for index, file_dir in enumerate(file_dirs):
          counter, outputs_img = 0, np.zeros((1,7))
-         for xind in range(6):
-             for yind in range(6):
-                 file_dir_st = str(file_dir).split(')')[0].split('(')[1]
+         for xind in range(num_windows):
+             for yind in range(num_windows):
+                 file_dir_st =  file_dir # str(file_dir).split(')')[0].split('(')[1]
                  # ---------------- Read Detections -------------------------------
                  if policy[index, counter] == 1:
                      preds_dir = '{}{}_{}_{}'.format(base_dir_fd, file_dir_st, str(xind), str(yind))
@@ -51,22 +53,23 @@ def get_detected_boxes(policy, file_dirs):
                  if gt:
                      for gt_ind in gt:
                          try:
-                             targets = np.vstack((targets, [index, mappings_labels[mappings_labels['labels']==gt_ind[1]].index.item(),
+                             targets = np.vstack((targets, [index, 0,
                                         gt_ind[0][0], gt_ind[0][1], gt_ind[0][2], gt_ind[0][3]]))
                          except Exception as error:
+                             pdb.set_trace()
                              print(error)
                  # ----------------------------------------------------------------
                  counter += 1
          outputs_all.append(torch.from_numpy(outputs_img))
 
     # Project the ground truth back to the image domain
-    targets[:,2:] = 416*targets[:,2:]
+    targets[:,2:] = img_size*targets[:,2:]
     return outputs_all, torch.from_numpy(np.delete(targets, 0, 0)), targets[:,1]
 
 def read_groundtruth(image_ids):
     base_dir = '/atlas/u/buzkent/Single_Shot_Object_Detector/prepare_dataset/train_chips_xview/'
-    object_interest = [73, 74, 76, 79, 77, 71, 72] #[11, 12, 13, 15]
-    patch_groundtruth = torch.zeros((len(image_ids), 16)).cuda()
+    object_interest = [73, 74, 76, 79, 77, 71, 72]
+    patch_groundtruth = torch.zeros((len(image_ids), num_actions)).cuda()
     for index, img_id in enumerate(image_ids):
         counter = 0
         for xind in range(4):
@@ -81,8 +84,8 @@ def read_groundtruth(image_ids):
 def read_offsets(image_ids):
     base_dir_fd = '/atlas/u/buzkent/EfficientObjectDetection/data/xView/reward_fd/'
     base_dir_cd = '/atlas/u/buzkent/EfficientObjectDetection/data/xView/reward_cd/'
-    offset_fd = torch.zeros((len(image_ids), 36)).cuda()
-    offset_cd = torch.zeros((len(image_ids), 36)).cuda()
+    offset_fd = torch.zeros((len(image_ids), num_actions)).cuda()
+    offset_cd = torch.zeros((len(image_ids), num_actions)).cuda()
     for index, img_id in enumerate(image_ids):
         offset_fd[index, :] = torch.from_numpy(np.loadtxt('{}{}'.format(base_dir_fd, img_id)).flatten())
         offset_cd[index, :] = torch.from_numpy(np.loadtxt('{}{}'.format(base_dir_cd, img_id)).flatten())
@@ -107,13 +110,14 @@ def performance_stats(policies, rewards):
 def compute_reward(offset_fd, offset_cd, policy, alpha=0.1, beta=0.1):
     # Reward function favors policies that drops patches only if the classifier
     # successfully categorizes the image
-    reward_patch = (offset_cd - offset_fd) * policy + -(offset_cd - offset_fd) * (1-policy)
-    reward_img = reward_patch.sum(dim=1)
+    reward_patch_acc = (offset_cd-offset_fd)*policy + -1*((offset_cd-offset_fd)*(1-policy))
+    reward_patch_acqcost = policy.sum(dim=1)/policy.size(1)
+    reward_patch_rtcost = policy.sum(dim=1)/policy.size(1)
+    reward_img = reward_patch_acc.sum(dim=1) + 5.0 * reward_patch_acqcost + 5.0 * reward_patch_rtcost
     reward = reward_img.unsqueeze(1)
     return reward.float(), reward
 
 def get_transforms(rnet, dset):
-
     mean = [0.485, 0.456, 0.406]
     std = [0.229, 0.224, 0.225]
     transform_train = transforms.Compose([
@@ -157,14 +161,29 @@ def action_space_model(dset):
 
     return mappings, img_size, interval
 
+def get_true_positives(file_dir):
+    gt_df = pd.read_csv(file_dir)
+    policy_fd = torch.zeros((len(gt_df), num_actions))
+    policy_cd = torch.ones((len(gt_df), num_actions))
+    outputs_fd, targets_fd, batch_labels = get_detected_boxes(policy_fd, gt_df.iloc[:, 0])
+    outputs_cd, targets_cd, batch_labels = get_detected_boxes(policy_cd, gt_df.iloc[:, 0])
+    metrics_fd = utils_detector.get_batch_statistics(outputs_fd, targets_fd, 0.5)
+    metrics_cd = utils_detector.get_batch_statistics(outputs_cd, targets_cd, 0.5)
+    true_positives_fd, _, _ = [np.concatenate(x, 0) for x in list(zip(*metrics_fd))]
+    true_positives_cd, _, _ = [np.concatenate(x, 0) for x in list(zip(*metrics_cd))]
+
+    return [true_positives_fd, true_positives_cd]
+
 # Pick from the datasets available and the hundreds of models we have lying around depending on the requirements.
 def get_dataset(model, root='data/'):
     rnet, dset = model.split('_')
     transform_train, transform_test = get_transforms(rnet, dset)
     trainset = CustomDatasetFromImages(root+'/xView/train.csv', transform_train)
-    testset = CustomDatasetFromImages(root+'/xView/test.csv', transform_test)
+    testset = CustomDatasetFromImages(root+'/xView/valid.csv', transform_test)
 
-    return trainset, testset
+    #true_positives = get_true_positives(root+'/xView/valid.csv')
+
+    return trainset, testset#, true_positives
 
 def set_parameter_requires_grad(model, feature_extracting):
     # When loading the models, make sure to call this function to update the weights
@@ -177,6 +196,6 @@ def get_model(model):
     agent = torchmodels.resnet34(pretrained=True)
     set_parameter_requires_grad(agent, False)
     num_ftrs = agent.fc.in_features
-    agent.fc = torch.nn.Linear(num_ftrs, 36)
+    agent.fc = torch.nn.Linear(num_ftrs, num_actions)
 
     return agent

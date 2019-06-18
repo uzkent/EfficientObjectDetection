@@ -15,7 +15,6 @@ How to Run on the fMoW Dataset:
        --ckpt_hr_cl Load the checkpoint from the directory (hr_classifier)
 """
 import os
-from tensorboard_logger import configure, log_value
 import torch
 import torch.autograd as autograd
 from torch.autograd import Variable
@@ -24,10 +23,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 import pdb
+import random
 import tqdm
 import utils
 import utils_detector
 import torch.optim as optim
+
+from tensorboard_logger import configure, log_value
 from torch.distributions import Multinomial, Bernoulli
 import torch.backends.cudnn as cudnn
 cudnn.benchmark = True
@@ -62,7 +64,7 @@ def train(epoch):
     	    inputs = inputs.cuda()
 
         # Get the low resolution agent images
-        probs = F.sigmoid(agent(inputs))
+        probs = F.sigmoid(agent.forward(inputs))
         probs = probs*args.alpha + (1-args.alpha) * (1-probs)
 
         # Sample the policies from the Bernoulli distribution characterized by agent's output
@@ -75,12 +77,14 @@ def train(epoch):
         policy_map[policy_map>=0.5] = 1.0
         policy_map = Variable(policy_map)
 
-        # Agent sampled high resolution images
+        # Get the batch wise metrics
         offset_fd, offset_cd = utils.read_offsets(targets)
 
         # Find the reward for baseline and sampled policy
         reward_map, _ = utils.compute_reward(offset_fd, offset_cd, policy_map.data)
         reward_sample, _ = utils.compute_reward(offset_fd, offset_cd, policy_sample.data)
+        # reward_sample += true_positives_sample.sum()/len(true_positives_sample)
+        # reward_map += true_positives_map.sum()/len(true_positives_map)
         advantage = reward_sample.cuda().float() - reward_map.cuda().float()
 
         # Find the loss for only the policy network
@@ -110,7 +114,7 @@ def test(epoch):
     # Test the policy network
     agent.eval()
 
-    matches, rewards, sample_metrics, policies, set_labels = [], [], [], [], []
+    matches, rewards, metrics, policies, set_labels = [], [], [], [], []
     for batch_idx, (inputs, targets) in tqdm.tqdm(enumerate(testloader), total=len(testloader)):
 
         inputs = Variable(inputs, volatile=True)
@@ -126,35 +130,38 @@ def test(epoch):
         policy[policy>=0.5] = 1.0
         policy = Variable(policy)
 
-        # Agent sampled high resolution images
-        offset_fd, offset_cd = utils.read_offsets(targets)
-
-        # Find the reward for baseline and sampled policy
-        reward, reward_acc = utils.compute_reward(offset_fd, offset_cd, policy.data)
-
-        # Read the Agent Chosen Detections and Targets
+        # ---------------------------------------
+        # policy[:, :] = 0
+        # for ind in range(policy.size(0)):
+        #     indexes = random.sample(range(0, 16), 6)
+        #     policy[ind, indexes] = 1
+        # ---------------------------------------
 
         # Compute the Batch-wise metrics
-        # [TODO] : Get the Outputs and Targets
+        offset_fd, offset_cd = utils.read_offsets(targets)
+
         outputs, targets, batch_labels = utils.get_detected_boxes(policy, targets)
-        sample_metrics += utils_detector.get_batch_statistics(outputs, targets, 0.5)
+        metrics += utils_detector.get_batch_statistics(outputs, targets, 0.5)
+
+        # Find the reward for baseline and sampled policy
+        reward, _ = utils.compute_reward(offset_fd, offset_cd, policy.data)
 
         set_labels += batch_labels.tolist()
         rewards.append(reward)
         policies.append(policy.data)
 
     # Compute the Precision and Recall Performance of the Agent and Detectors
-    true_positives, pred_scores, pred_labels = [np.concatenate(x, 0) for x in list(zip(*sample_metrics))]
+    true_positives, pred_scores, pred_labels = [np.concatenate(x, 0) for x in list(zip(*metrics))]
     precision, recall, AP, f1, ap_class = utils_detector.ap_per_class(true_positives, pred_scores, pred_labels, set_labels)
 
-    print 'Test - AP: %.2f | AR : %.2f'%(AP[47], recall[47])
+    print 'Test - AP: %.2f | AR : %.2f'%(AP[0], recall[0])
     reward, sparsity, variance, policy_set = utils.performance_stats(policies, rewards)
 
     print 'Test - Rw: %.2E | S: %.3f | V: %.3f | #: %d'%(reward, sparsity, variance, len(policy_set))
 
     log_value('test_reward', reward, epoch)
-    log_value('test_AP', AP[47], epoch)
-    log_value('test_AR', recall[47], epoch)
+    log_value('test_AP', AP[0], epoch)
+    log_value('test_AR', recall[0], epoch)
     log_value('test_sparsity', sparsity, epoch)
     log_value('test_variance', variance, epoch)
     log_value('test_unique_policies', len(policy_set), epoch)
@@ -172,7 +179,7 @@ def test(epoch):
 #--------------------------------------------------------------------------------------------------------#
 trainset, testset = utils.get_dataset(args.model, args.data_dir)
 trainloader = torchdata.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=16)
-testloader = torchdata.DataLoader(testset, batch_size=10, shuffle=False, num_workers=0)
+testloader = torchdata.DataLoader(testset, batch_size=50, shuffle=False, num_workers=16)
 agent = utils.get_model(args.model)
 
 # ---- Load the pre-trained model ----------------------
@@ -195,6 +202,6 @@ optimizer = optim.Adam(agent.parameters(), lr=args.lr)
 # Save the args to the checkpoint directory
 configure(args.cv_dir+'/log', flush_secs=5)
 for epoch in range(start_epoch, start_epoch+args.max_epochs+1):
-    # train(epoch)
+    train(epoch)
     if epoch % 10 == 0:
         test(epoch)
