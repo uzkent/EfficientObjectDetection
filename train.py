@@ -25,8 +25,7 @@ import numpy as np
 import pdb
 import random
 import tqdm
-import utils
-import utils_detector
+from utils import utils, utils_detector
 import torch.optim as optim
 
 from tensorboard_logger import configure, log_value
@@ -35,7 +34,7 @@ import torch.backends.cudnn as cudnn
 cudnn.benchmark = True
 
 import argparse
-parser = argparse.ArgumentParser(description='PatchDrop Pre-Training')
+parser = argparse.ArgumentParser(description='SingleStageApproach')
 parser.add_argument('--lr', type=float, default=1e-3, help='learning rate')
 parser.add_argument('--model', default='R32_C10', help='R<depth>_<dataset> see utils.py for a list of configurations')
 parser.add_argument('--data_dir', default='data/', help='data directory')

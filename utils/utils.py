@@ -12,7 +12,7 @@ import json
 import utils_detector
 
 from random import randint, sample
-from xView_dataloader import CustomDatasetFromImages
+from dataset.xView_dataloader import CustomDatasetFromImages
 img_size = 416
 
 def save_args(__file__, args):
