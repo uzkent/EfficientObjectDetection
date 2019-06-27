@@ -50,44 +50,73 @@ parser.add_argument('--alpha', type=float, default=0.8, help='probability boundi
 parser.add_argument('--sigma', type=float, default=0.1, help='multiplier for the entropy loss')
 args = parser.parse_args()
 
+def read_confidences(image_ids, file_dir, num_windows):
+    offset_cd = np.zeros((len(image_ids), num_windows, num_windows))
+    for index, img_id in enumerate(image_ids):
+        for rw in range(num_windows):
+            for cl in range(num_windows):
+                path = '{}{}_{}_{}_ds'.format(file_dir, img_id, str(rw), str(cl))
+                if os.path.exists(path):
+                    offset_cd[index, rw, cl] = np.loadtxt(path).reshape([-1,7])[:, 4].mean()
+                else:
+                    offset_cd[index, rw, cl] = 1.0
+
+    return torch.from_numpy(offset_cd)
+
 def test(epoch):
     # Test the policy network
-    matches, rewards, metrics, policies, set_labels = [], [], [], [], []
+    metrics, set_labels, num_sampled, num_total = [], [], 0., 0.
     for batch_idx, (inputs, targets) in tqdm.tqdm(enumerate(testloader), total=len(testloader)):
 
         # Initiate the policy
-        policy = torch.zeros((inputs.size(1), num_actions)).cuda()
+        policy_cd = torch.zeros((inputs.size(0), num_actions_cd))
+        conf_cd = read_confidences(targets, base_dir, num_windows_cd)
 
-        # ---------------------------------------
-        policy[:, :] = 0
-        for ind in range(policy.size(0)):
-            indexes = random.sample(range(0, 16), 6)
-            policy[ind, indexes] = 1
-        # ---------------------------------------
+        indices_sample = conf_cd[:,:].cpu().numpy().flatten().argsort()[:7]
+        policy_cd[:, indices_sample] = 1
 
-        outputs, targets, batch_labels = utils.get_detected_boxes(policy, targets)
-        metrics += utils_detector.get_batch_statistics(outputs, targets, 0.5)
+        counter = 0
+        for xind in range(num_windows_cd):
+            for yind in range(num_windows_cd):
 
-        # Find the reward for baseline and sampled policy
-        reward, _ = utils.compute_reward(offset_fd, offset_cd, policy.data)
+                policy_fd = torch.zeros((inputs.size(0), num_actions_fd))
 
-        set_labels += batch_labels.tolist()
-        rewards.append(reward)
-        policies.append(policy.data)
+                targets_ind = ['{}_{}_{}'.format(str(targets[0].numpy().tolist()), str(xind), str(yind))]
+                conf_fd = read_confidences(targets_ind, base_dir_cd, num_windows_fd)
+
+                if policy_cd[:, counter] == 0:
+                    policy_fd[:, :] = 0
+                else:
+                    indices_sample = conf_fd[:, :].cpu().numpy().flatten().argsort()[:4]
+                    policy_fd[:, indices_sample] = 1
+
+                num_sampled += (policy_fd == 1).sum().numpy().tolist()
+                num_total += policy_fd.size(1)
+
+                outputs, targets_np, batch_labels = utils.get_detected_boxes(policy_fd, targets_ind, num_windows_fd,
+                                                    base_dir_fd, base_dir_cd, base_dir_gt)
+                metrics += utils_detector.get_batch_statistics(outputs, targets_np, 0.5)
+
+                set_labels += batch_labels.tolist()
+                counter += 1
 
     # Compute the Precision and Recall Performance of the Agent and Detectors
     true_positives, pred_scores, pred_labels = [np.concatenate(x, 0) for x in list(zip(*metrics))]
     precision, recall, AP, f1, ap_class = utils_detector.ap_per_class(true_positives, pred_scores, pred_labels, set_labels)
 
-    print 'Test - AP: %.2f | AR : %.2f'%(AP[0], recall[0])
-    reward, sparsity, variance, policy_set = utils.performance_stats(policies, rewards)
-
-    print 'Test - Rw: %.2E | S: %.3f | V: %.3f | #: %d'%(reward, sparsity, variance, len(policy_set))
+    print 'Test - AP: %.2f | AR : %.2f | RS : %.2f'%(AP[0], recall[0], num_sampled/num_total)
 
 #--------------------------------------------------------------------------------------------------------#
-num_actions = 16
-num_window_side = 4
+num_windows_cd = 4
+num_windows_fd = 2
+num_actions_cd = 16
+num_actions_fd = 4
 _, testset = utils.get_dataset(args.model, args.data_dir)
-testloader = torchdata.DataLoader(testset, batch_size=1, shuffle=False, num_workers=num_actions)
+testloader = torchdata.DataLoader(testset, batch_size=1, shuffle=False, num_workers=16)
+
+base_dir = '/atlas/u/buzkent/PyTorch-YOLOv3/data/custom/building/cd_output_txt/'
+base_dir_fd = '/atlas/u/buzkent/PyTorch-YOLOv3/data/custom/building/fd_output_txt_small/'
+base_dir_cd = '/atlas/u/buzkent/PyTorch-YOLOv3/data/custom/building/cd_output_txt_small/'
+base_dir_gt = '/atlas/u/buzkent/PyTorch-YOLOv3/data/custom/labels/'
 
 test(0)

@@ -51,11 +51,11 @@ parser.add_argument('--sigma', type=float, default=0.1, help='multiplier for the
 args = parser.parse_args()
 
 def read_confidences(image_ids):
-    base_dir_cd = '/atlas/u/buzkent/PyTorch-YOLOv3/data/custom/cd_output_txt/'
-    offset_cd = np.zeros((len(image_ids), num_window_side, num_window_side))
+    base_dir_cd = '/atlas/u/buzkent/PyTorch-YOLOv3/data/custom/building/cd_output_txt/'
+    offset_cd = np.zeros((len(image_ids), num_windows, num_windows))
     for index, img_id in enumerate(image_ids):
-        for rw in range(num_window_side):
-            for cl in range(num_window_side):
+        for rw in range(num_windows):
+            for cl in range(num_windows):
                 path = '{}{}_{}_{}_ds'.format(base_dir_cd, img_id.cpu().numpy().tolist(), str(rw), str(cl))
                 if os.path.exists(path):
                     try:
@@ -63,7 +63,7 @@ def read_confidences(image_ids):
                     except Exception as error:
                         offset_cd[index, rw, cl] = np.loadtxt(path)[4]
                 else:
-                    offset_cd[index, rw, cl] = 100
+                    offset_cd[index, rw, cl] = 1.0
 
     return torch.from_numpy(offset_cd)
 
@@ -77,19 +77,14 @@ def test(epoch):
 
         # Compute the Batch-wise metrics
         conf_cd = read_confidences(targets)
-        offset_fd, offset_cd = utils.read_offsets(targets)
 
-        indices_sample = conf_cd[:,:].cpu().numpy().flatten().argsort()[:0]
+        indices_sample = conf_cd[:,:].cpu().numpy().flatten().argsort()[:7]
         policy[:, indices_sample] = 1
 
-        outputs, targets, batch_labels = utils.get_detected_boxes(policy, targets)
+        outputs, targets, batch_labels = utils.get_detected_boxes(policy, targets, num_windows, base_dir_fd, base_dir_cd, base_dir_gt)
         metrics += utils_detector.get_batch_statistics(outputs, targets, 0.5)
 
-        # Find the reward for baseline and sampled policy
-        reward, _ = utils.compute_reward(offset_fd, offset_cd, policy.data)
-
         set_labels += batch_labels.tolist()
-        rewards.append(reward)
         policies.append(policy.data)
 
     # Compute the Precision and Recall Performance of the Agent and Detectors
@@ -97,14 +92,17 @@ def test(epoch):
     precision, recall, AP, f1, ap_class = utils_detector.ap_per_class(true_positives, pred_scores, pred_labels, set_labels)
 
     print 'Test - AP: %.2f | AR : %.2f'%(AP[0], recall[0])
-    reward, sparsity, variance, policy_set = utils.performance_stats(policies, rewards)
-
-    print 'Test - Rw: %.2E | S: %.3f | V: %.3f | #: %d'%(reward, sparsity, variance, len(policy_set))
 
 #--------------------------------------------------------------------------------------------------------#
 num_actions = 16
-num_window_side = 4
+num_windows = 4
 _, testset = utils.get_dataset(args.model, args.data_dir)
 testloader = torchdata.DataLoader(testset, batch_size=1, shuffle=False, num_workers=num_actions)
+
+base_dir_reward_fd = '/atlas/u/buzkent/EfficientObjectDetection/data/xView/reward_fd/'
+base_dir_reward_cd = '/atlas/u/buzkent/EfficientObjectDetection/data/xView/reward_cd/'
+base_dir_fd = '/atlas/u/buzkent/PyTorch-YOLOv3/data/custom/building/fd_output_txt/'
+base_dir_cd = '/atlas/u/buzkent/PyTorch-YOLOv3/data/custom/building/cd_output_txt/'
+base_dir_gt = '/atlas/u/buzkent/PyTorch-YOLOv3/data/custom/labels/'
 
 test(0)

@@ -168,17 +168,18 @@ def test(epoch):
     torch.save(state, args.cv_dir+'/ckpt_E_%d_R_%.2E'%(epoch, reward))
 
 #--------------------------------------------------------------------------------------------------------#
-num_actions = 16
-num_windows = 4
+num_actions = 4
+num_windows = 2
 trainset, testset = utils.get_dataset(args.model, args.data_dir)
 trainloader = torchdata.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=16)
-testloader = torchdata.DataLoader(testset, batch_size=50, shuffle=False, num_workers=16)
+testloader = torchdata.DataLoader(testset, batch_size=256, shuffle=False, num_workers=16)
 agent = utils.get_model(args.model, num_actions)
 
-base_dir_reward_fd = '/atlas/u/buzkent/EfficientObjectDetection/data/xView/reward_fd/'
-base_dir_reward_cd = '/atlas/u/buzkent/EfficientObjectDetection/data/xView/reward_cd/'
-base_dir_fd = '/atlas/u/buzkent/PyTorch-YOLOv3/data/custom/building/fd_output_txt/'
-base_dir_cd = '/atlas/u/buzkent/PyTorch-YOLOv3/data/custom/building/cd_output_txt/'
+# Directories for the detector related files
+base_dir_reward_fd = '/atlas/u/buzkent/EfficientObjectDetection/data/xView/reward_fd_small/'
+base_dir_reward_cd = '/atlas/u/buzkent/EfficientObjectDetection/data/xView/reward_cd_small/'
+base_dir_fd = '/atlas/u/buzkent/PyTorch-YOLOv3/data/custom/building/fd_output_txt_small/'
+base_dir_cd = '/atlas/u/buzkent/PyTorch-YOLOv3/data/custom/building/cd_output_txt_small/'
 base_dir_gt = '/atlas/u/buzkent/PyTorch-YOLOv3/data/custom/labels/'
 
 # ---- Load the pre-trained model ----------------------

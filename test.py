@@ -99,4 +99,4 @@ if args.parallel:
 
 agent.cuda()
 
-test(epoch)
+test(0)
