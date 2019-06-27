@@ -25,10 +25,9 @@ import numpy as np
 import pdb
 import random
 import tqdm
-import utils
-import utils_detector
 import torch.optim as optim
 
+from utils import utils, utils_detector
 from tensorboard_logger import configure, log_value
 from torch.distributions import Multinomial, Bernoulli
 import torch.backends.cudnn as cudnn
