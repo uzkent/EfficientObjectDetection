@@ -26,6 +26,8 @@ import pdb
 import random
 import tqdm
 from utils import utils, utils_detector
+from constants import base_dir_gt, base_dir_cd, base_dir_fd, base_dir_reward_cd, base_dir_reward_fd
+from constants import num_actions_coarse, num_windows_cd, num_windows_fd
 import torch.optim as optim
 
 from tensorboard_logger import configure, log_value
@@ -77,11 +79,13 @@ def train(epoch):
         policy_map = Variable(policy_map)
 
         # Get the batch wise metrics
-        offset_fd, offset_cd = utils.read_offsets(targets, base_dir_reward_fd, base_dir_reward_cd, num_actions)
+        agent_acc_map = utils.get_accuracy_agent(policy_map, targets, num_windows_cd, num_windows_fd, base_dir_fd, base_dir_cd, base_dir_gt)
+        agent_acc_sample = utils.get_accuracy_agent(policy_sample, targets, num_windows_cd, num_windows_fd, base_dir_fd, base_dir_cd, base_dir_gt)
+        offset_fd, offset_cd = utils.read_offsets(targets, base_dir_reward_fd, base_dir_reward_cd, num_actions_coarse)
 
         # Find the reward for baseline and sampled policy
-        reward_map, _ = utils.compute_reward(offset_fd, offset_cd, policy_map.data)
-        reward_sample, _ = utils.compute_reward(offset_fd, offset_cd, policy_sample.data)
+        reward_map = utils.compute_reward(offset_fd, offset_cd, agent_acc_map, policy_map.data)
+        reward_sample = utils.compute_reward(offset_fd, offset_cd, agent_acc_sample, policy_sample.data)
         advantage = reward_sample.cuda().float() - reward_map.cuda().float()
 
         # Find the loss for only the policy network
@@ -128,13 +132,15 @@ def test(epoch):
         policy = Variable(policy)
 
         # Compute the Batch-wise metrics
-        offset_fd, offset_cd = utils.read_offsets(targets, base_dir_reward_fd, base_dir_reward_cd, num_actions)
-
-        outputs, targets, batch_labels = utils.get_detected_boxes(policy, targets, num_windows, base_dir_fd, base_dir_cd, base_dir_gt)
-        metrics += utils_detector.get_batch_statistics(outputs, targets, 0.5)
+        offset_fd, offset_cd = utils.read_offsets(targets, base_dir_reward_fd, base_dir_reward_cd, num_actions_coarse)
 
         # Find the reward for baseline and sampled policy
-        reward, _ = utils.compute_reward(offset_fd, offset_cd, policy.data)
+        agent_acc = utils.get_accuracy_agent(policy, targets, num_windows_cd, num_windows_fd, base_dir_fd, base_dir_cd, base_dir_gt)
+
+        reward = utils.compute_reward(offset_fd, offset_cd, agent_acc, policy.data)
+        outputs, targets, batch_labels = utils.get_detected_boxes_coarse(policy, targets, num_windows_cd, num_windows_fd, base_dir_fd,
+                            base_dir_cd, base_dir_gt)
+        metrics += utils_detector.get_batch_statistics(outputs, targets, 0.5)
 
         set_labels += batch_labels.tolist()
         rewards.append(reward)
@@ -144,7 +150,7 @@ def test(epoch):
     true_positives, pred_scores, pred_labels = [np.concatenate(x, 0) for x in list(zip(*metrics))]
     precision, recall, AP, f1, ap_class = utils_detector.ap_per_class(true_positives, pred_scores, pred_labels, set_labels)
 
-    print 'Test - AP: %.2f | AR : %.2f'%(AP[0], recall[0])
+    print 'Test - AP: %.3f | AR : %.3f'%(AP[0], recall[0])
     reward, sparsity, variance, policy_set = utils.performance_stats(policies, rewards)
 
     print 'Test - Rw: %.2E | S: %.3f | V: %.3f | #: %d'%(reward, sparsity, variance, len(policy_set))
@@ -165,20 +171,11 @@ def test(epoch):
       'reward': reward,
     }
     torch.save(state, args.cv_dir+'/ckpt_E_%d_R_%.2E'%(epoch, reward))
-
 #--------------------------------------------------------------------------------------------------------#
-num_actions = 16
-num_windows = 4
 trainset, testset = utils.get_dataset(args.model, args.data_dir)
 trainloader = torchdata.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=16)
-testloader = torchdata.DataLoader(testset, batch_size=50, shuffle=False, num_workers=16)
-agent = utils.get_model(args.model, num_actions)
-
-base_dir_reward_fd = '/atlas/u/buzkent/EfficientObjectDetection/data/xView/reward_fd/'
-base_dir_reward_cd = '/atlas/u/buzkent/EfficientObjectDetection/data/xView/reward_cd/'
-base_dir_fd = '/atlas/u/buzkent/PyTorch-YOLOv3/data/custom/building/fd_output_txt/'
-base_dir_cd = '/atlas/u/buzkent/PyTorch-YOLOv3/data/custom/building/cd_output_txt/'
-base_dir_gt = '/atlas/u/buzkent/PyTorch-YOLOv3/data/custom/labels/'
+testloader = torchdata.DataLoader(testset, batch_size=args.batch_size, shuffle=False, num_workers=16)
+agent = utils.get_model(args.model, num_actions_coarse)
 
 # ---- Load the pre-trained model ----------------------
 start_epoch = 0
@@ -191,7 +188,6 @@ if args.load is not None:
 # Parallelize the models if multiple GPUs available - Important for Large Batch Size
 if args.parallel:
     agent = nn.DataParallel(agent)
-
 agent.cuda()
 
 # Update the parameters of the policy network

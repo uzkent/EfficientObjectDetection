@@ -1,0 +1,10 @@
+base_dir_fd = '/atlas/u/buzkent/PyTorch-YOLOv3/data/custom/building/fd_output_txt/fd_output_txt_small/'
+base_dir_cd = '/atlas/u/buzkent/PyTorch-YOLOv3/data/custom/building/cd_output_txt/cd_output_txt_small/'
+base_dir_gt = '/atlas/u/buzkent/PyTorch-YOLOv3/data/custom/labels/'
+base_dir_reward_fd = '/atlas/u/buzkent/EfficientObjectDetection/data/xView/building/reward_fd_small_upd/'
+base_dir_reward_cd = '/atlas/u/buzkent/EfficientObjectDetection/data/xView/building/reward_cd_small_upd/'
+num_actions_coarse = 16
+num_actions_fine = 4
+num_windows_cd = 4
+num_windows_fd = 2
+img_size_fd = 112

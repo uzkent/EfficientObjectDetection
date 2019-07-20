@@ -25,6 +25,8 @@ import numpy as np
 import pdb
 import random
 import tqdm
+from constants import base_dir_gt, base_dir_cd, base_dir_fd, base_dir_reward_cd, base_dir_reward_fd
+from constants import num_actions_fine, num_windows_cd, num_windows_fd
 from utils import utils, utils_detector
 import torch.optim as optim
 
@@ -63,6 +65,7 @@ def train(epoch):
     	    inputs = inputs.cuda()
 
         # Get the low resolution agent images
+        inputs, targets = utils.rearrange_batch(inputs, targets, random.randint(0, 15))
         probs = F.sigmoid(agent.forward(inputs))
         probs = probs*args.alpha + (1-args.alpha) * (1-probs)
 
@@ -77,11 +80,15 @@ def train(epoch):
         policy_map = Variable(policy_map)
 
         # Get the batch wise metrics
-        offset_fd, offset_cd = utils.read_offsets(targets, base_dir_reward_fd, base_dir_reward_cd, num_actions)
+        agent_acc_map = 0# utils.get_accuracy_agent(policy_map, targets, num_windows_cd, num_windows_fd,
+                        # base_dir_fd, base_dir_cd, base_dir_gt, False)
+        agent_acc_sample = 0 #utils.get_accuracy_agent(policy_sample, targets, num_windows_cd, num_windows_fd,
+                        #base_dir_fd, base_dir_cd, base_dir_gt, False)
+        offset_fd, offset_cd = utils.read_offsets(targets, base_dir_reward_fd, base_dir_reward_cd, num_actions_fine)
 
         # Find the reward for baseline and sampled policy
-        reward_map, _ = utils.compute_reward(offset_fd, offset_cd, policy_map.data)
-        reward_sample, _ = utils.compute_reward(offset_fd, offset_cd, policy_sample.data)
+        reward_map, _ = utils.compute_reward(offset_fd, offset_cd, agent_acc_map, policy_map.data)
+        reward_sample, _ = utils.compute_reward(offset_fd, offset_cd, agent_acc_sample, policy_sample.data)
         advantage = reward_sample.cuda().float() - reward_map.cuda().float()
 
         # Find the loss for only the policy network
@@ -119,7 +126,8 @@ def test(epoch):
             inputs = inputs.cuda()
 
         # Get the low resolution agent images
-        probs = F.sigmoid(agent(inputs))
+        inputs, targets = utils.rearrange_batch(inputs, targets, 0, False)
+        probs = F.sigmoid(agent.forward(inputs))
 
         # Sample the policy from the agents output
         policy = probs.data.clone()
@@ -128,13 +136,15 @@ def test(epoch):
         policy = Variable(policy)
 
         # Compute the Batch-wise metrics
-        offset_fd, offset_cd = utils.read_offsets(targets, base_dir_reward_fd, base_dir_reward_cd, num_actions)
+        agent_acc = 0 # utils.get_accuracy_agent(policy, targets, num_windows_cd, num_windows_fd,
+                     # base_dir_fd, base_dir_cd, base_dir_gt, False)
+        offset_fd, offset_cd = utils.read_offsets(targets, base_dir_reward_fd, base_dir_reward_cd, num_actions_fine)
 
-        outputs, targets, batch_labels = utils.get_detected_boxes(policy, targets, num_windows, base_dir_fd, base_dir_cd, base_dir_gt)
+        outputs, targets, batch_labels = utils.get_detected_boxes(policy, targets, num_windows_fd, base_dir_fd, base_dir_cd, base_dir_gt)
         metrics += utils_detector.get_batch_statistics(outputs, targets, 0.5)
 
         # Find the reward for baseline and sampled policy
-        reward, _ = utils.compute_reward(offset_fd, offset_cd, policy.data)
+        reward, _ = utils.compute_reward(offset_fd, offset_cd, agent_acc, policy.data)
 
         set_labels += batch_labels.tolist()
         rewards.append(reward)
@@ -144,7 +154,7 @@ def test(epoch):
     true_positives, pred_scores, pred_labels = [np.concatenate(x, 0) for x in list(zip(*metrics))]
     precision, recall, AP, f1, ap_class = utils_detector.ap_per_class(true_positives, pred_scores, pred_labels, set_labels)
 
-    print 'Test - AP: %.2f | AR : %.2f'%(AP[0], recall[0])
+    print 'Test - AP: %.3f | AR : %.3f'%(AP[0], recall[0])
     reward, sparsity, variance, policy_set = utils.performance_stats(policies, rewards)
 
     print 'Test - Rw: %.2E | S: %.3f | V: %.3f | #: %d'%(reward, sparsity, variance, len(policy_set))
@@ -167,19 +177,10 @@ def test(epoch):
     torch.save(state, args.cv_dir+'/ckpt_E_%d_R_%.2E'%(epoch, reward))
 
 #--------------------------------------------------------------------------------------------------------#
-num_actions = 4
-num_windows = 2
 trainset, testset = utils.get_dataset(args.model, args.data_dir)
 trainloader = torchdata.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=16)
-testloader = torchdata.DataLoader(testset, batch_size=256, shuffle=False, num_workers=16)
-agent = utils.get_model(args.model, num_actions)
-
-# Directories for the detector related files
-base_dir_reward_fd = '/atlas/u/buzkent/EfficientObjectDetection/data/xView/reward_fd_small/'
-base_dir_reward_cd = '/atlas/u/buzkent/EfficientObjectDetection/data/xView/reward_cd_small/'
-base_dir_fd = '/atlas/u/buzkent/PyTorch-YOLOv3/data/custom/building/fd_output_txt_small/'
-base_dir_cd = '/atlas/u/buzkent/PyTorch-YOLOv3/data/custom/building/cd_output_txt_small/'
-base_dir_gt = '/atlas/u/buzkent/PyTorch-YOLOv3/data/custom/labels/'
+testloader = torchdata.DataLoader(testset, batch_size=args.batch_size, shuffle=False, num_workers=16)
+agent = utils.get_model(args.model, num_actions_fine)
 
 # ---- Load the pre-trained model ----------------------
 start_epoch = 0
