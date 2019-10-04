@@ -13,8 +13,9 @@ import utils_detector
 import torch.nn.functional as F
 import time
 from random import randint, sample
-from dataset.xView_dataloader import CustomDatasetFromImages, CustomDatasetFromArrays
-img_size = 416
+from dataset.xView_dataloader import CustomDatasetFromImages
+img_size_cd = 64.
+img_size_fd = 320.
 
 def save_args(__file__, args):
     shutil.copy(os.path.basename(__file__), args.cv_dir)
@@ -49,18 +50,21 @@ def get_detected_boxes_coarse(policy, file_dirs, num_windows_cd, num_windows_fd,
                              gt = np.loadtxt(gt_path).reshape([-1, 5])
                              gt = np.hstack((counter_temp*np.ones((gt.shape[0], 1)), gt))
                              targets = np.vstack((targets, gt))
-                             counter_temp += 1
+                             counter_temp+=1
                              # ----------------- Read Detections -------------------------------
                              if policy[index, counter] == 1:
                                  preds_dir = '{}{}_{}_{}_{}_{}'.format(base_dir_fd, file_dir_st, str(xind), str(yind), str(xind2), str(yind2))
                                  if os.path.exists(preds_dir):
-                                     outputs_all.append(torch.from_numpy(np.loadtxt(preds_dir).reshape([-1,7])))
+                                     preds = np.loadtxt(preds_dir).reshape([-1,7])
+                                     outputs_all.append(torch.from_numpy(preds))
                                  else:
                                      outputs_all.append(torch.from_numpy(np.zeros((1, 7))))
                              else:
-                                 preds_dir = '{}{}_{}_{}_{}_{}_ds'.format(base_dir_cd, file_dir_st, str(xind), str(yind), str(xind2), str(yind2))
+                                 preds_dir = '{}{}_{}_{}_{}_{}'.format(base_dir_cd, file_dir_st, str(xind), str(yind), str(xind2), str(yind2))
                                  if os.path.exists(preds_dir):
-                                     outputs_all.append(torch.from_numpy(np.loadtxt(preds_dir).reshape([-1,7])))
+                                     preds = np.loadtxt(preds_dir).reshape([-1,7])
+                                     preds[:, :4] = (preds[:, :4] / img_size_cd) * img_size_fd
+                                     outputs_all.append(torch.from_numpy(preds))
                                  else:
                                      outputs_all.append(torch.from_numpy(np.zeros((1, 7))))
                          else:
@@ -70,45 +74,53 @@ def get_detected_boxes_coarse(policy, file_dirs, num_windows_cd, num_windows_fd,
 
     # Rescale target
     targets[:, 2:] = xywh2xyxy(targets[:, 2:])
-    targets[:, 2:] *= img_size
+    targets[:, 2:] *= img_size_fd
     targets = np.delete(targets, 0, 0)
     return outputs_all, torch.from_numpy(targets), targets[:,1]
 
-def get_detected_boxes(policy, file_dirs, num_windows, base_dir_fd, base_dir_cd, base_dir_gt):
+def get_detected_boxes(policy, file_dirs, num_windows, base_dir_fd, base_dir_cd, base_dir_gt):#, zoomed_ins, num_objects):
     outputs_all, targets, counter_temp = [], np.zeros((1, 6)), 0
-    for index, file_dir in enumerate(file_dirs):
-         counter = 0
+    for index, file_dir_st in enumerate(file_dirs):
+         counter = -1
          for xind in range(num_windows):
              for yind in range(num_windows):
-                 file_dir_st = file_dir
                  # ---------------- Read Ground Truth -----------------------------
+                 counter += 1
                  gt_path = '{}{}_{}_{}.txt'.format(base_dir_gt, file_dir_st, str(xind), str(yind))
                  if os.path.exists(gt_path):
                      gt = np.loadtxt(gt_path).reshape([-1, 5])
                      gt = np.hstack((counter_temp*np.ones((gt.shape[0], 1)), gt))
                      counter_temp += 1
-                     targets = np.vstack((targets, gt))
+                     # num_objects.append(gt.shape[0]) #np.mean(1000 * gt[:, 4] * gt[:, 5]))
                      # ---------------- Read Detections -------------------------------
                      if policy[index, counter] == 1:
+                         # zoomed_ins.append(1)
+                         gt[:, 2:] = xywh2xyxy(gt[:, 2:])
+                         gt[:, 2:] *= img_size_fd
                          preds_dir = '{}{}_{}_{}'.format(base_dir_fd, file_dir_st, str(xind), str(yind))
                          if os.path.exists(preds_dir):
-                             outputs_all.append(torch.from_numpy(np.loadtxt(preds_dir).reshape([-1,7])))
+                             preds = np.loadtxt(preds_dir).reshape([-1,7])
+                             outputs_all.append(torch.from_numpy(preds))
                          else:
-                             outputs_all.append(torch.from_numpy(np.zeros((1, 7))))
+                             outputs_all.append(torch.from_numpy(np.zeros((1,7))))
                      else:
-                         preds_dir = '{}{}_{}_{}_ds'.format(base_dir_cd, file_dir_st, str(xind), str(yind))
+                         #zoomed_ins.append(0)
+                         gt[:, 2:] = xywh2xyxy(gt[:, 2:])
+                         gt[:, 2:] *= img_size_cd
+                         preds_dir = '{}{}_{}_{}'.format(base_dir_cd, file_dir_st, str(xind), str(yind))
                          if os.path.exists(preds_dir):
-                             outputs_all.append(torch.from_numpy(np.loadtxt(preds_dir).reshape([-1,7])))
+                             preds = np.loadtxt(preds_dir).reshape([-1,7])
+                             outputs_all.append(torch.from_numpy(preds))
                          else:
-                             outputs_all.append(torch.from_numpy(np.zeros((1, 7))))
+                             outputs_all.append(torch.from_numpy(np.zeros((1,7))))
+                     targets = np.vstack((targets, gt))
                  else:
+                     #num_objects.append(0)
+                     #zoomed_ins.append(0)
                      continue
-                 counter += 1
                  # ----------------------------------------------------------------
 
     # Rescale target
-    targets[:, 2:] = xywh2xyxy(targets[:, 2:])
-    targets[:, 2:] *= img_size
     targets = np.delete(targets, 0, 0)
     return outputs_all, torch.from_numpy(targets), targets[:,1]
 
@@ -156,28 +168,28 @@ def performance_stats(policies, rewards):
 
     return reward, num_unique_policy, variance, policy_set
 
-def compute_reward(offset_fd, offset_cd, reward_patch_acc, policy, alpha=0.1, beta=0.1):
+def compute_reward(offset_fd, offset_cd, reward_patch_acc, policy, beta, sigma):
     # Reward function favors policies that drops patches only if the classifier
     # successfully categorizes the image
-    offset_cd += 0.1
-    reward_patch_diff = (offset_fd - 0.*offset_cd)*policy + -1*((offset_fd - 0.*offset_cd)*(1-policy))
+    offset_cd += beta
+    reward_patch_diff = (offset_fd - offset_cd)*policy + -1*((offset_fd - offset_cd)*(1-policy))
     reward_patch_acqcost = (policy.size(1) - policy.sum(dim=1)) / policy.size(1)
-    reward_img = (1/2.) * reward_patch_diff.sum(dim=1) + 1.0 * reward_patch_acqcost + reward_patch_acc
+    reward_img = (0.1) * reward_patch_diff.sum(dim=1) + sigma * reward_patch_acqcost
     reward = reward_img.unsqueeze(1)
     return reward.float()
 
-def get_transforms(rnet, dset):
+def get_transforms(rnet, dset, img_size):
     mean = [0.485, 0.456, 0.406]
     std = [0.229, 0.224, 0.225]
     transform_train = transforms.Compose([
-       transforms.Scale(448),
-       transforms.RandomCrop(448),
+       transforms.Scale(img_size),
+       transforms.RandomCrop(img_size),
        transforms.ToTensor(),
        transforms.Normalize(mean, std)
     ])
     transform_test = transforms.Compose([
-       transforms.Scale(448),
-       transforms.CenterCrop(448),
+       transforms.Scale(img_size),
+       transforms.CenterCrop(img_size),
        transforms.ToTensor(),
        transforms.Normalize(mean, std)
     ])
@@ -200,10 +212,10 @@ def rearrange_batch(inputs, targets, selected_index, train_time=True, num_window
                 y2 = y1 + img_size
                 if train_time:
                     if (xind*num_windows+yind) == selected_index:
-                        inputs_partitioned[ind, :, :, :] = inputs[ind, :, y1:y2, x1:x2]
+                        inputs_partitioned[ind, :, :, :] = inputs[ind, :, x1:x2, y1:y2]
                         targets_partitioned.append('{}_{}_{}'.format(str(targets[ind].cpu().numpy().tolist()), str(xind), str(yind)))
                 else:
-                    inputs_partitioned[counter, :, :, :] = inputs[ind, :, y1:y2, x1:x2]
+                    inputs_partitioned[counter, :, :, :] = inputs[ind, :, x1:x2, y1:y2]
                     targets_partitioned.append('{}_{}_{}'.format(str(targets[ind].cpu().numpy().tolist()), str(xind), str(yind)))
                     counter += 1
 
@@ -224,27 +236,12 @@ def agent_chosen_input(input_org, policy, mappings, interval):
 
     return input_org.cuda()
 
-def action_space_model(dset, fine=True):
-    if fine:
-        img_size = 448
-        interval = 112
-    else:
-        img_size = 112
-        interval = 56
-    # Model the action space by dividing the image space into equal size patches
-    mappings = []
-    for cl in range(0, img_size, interval):
-        for rw in range(0, img_size, interval):
-            mappings.append([cl, rw])
-
-    return mappings, img_size, interval
-
 # Pick from the datasets available and the hundreds of models we have lying around depending on the requirements.
-def get_dataset(model, root='data/'):
+def get_dataset(model, img_size, root='data/'):
     rnet, dset = model.split('_')
-    transform_train, transform_test = get_transforms(rnet, dset)
-    trainset = CustomDatasetFromImages(root+'/xView/train.csv', transform_train)
-    testset = CustomDatasetFromImages(root+'/xView/valid.csv', transform_test)
+    transform_train, transform_test = get_transforms(rnet, dset, img_size)
+    trainset = CustomDatasetFromImages(root+'train.csv', transform_train)
+    testset = CustomDatasetFromImages(root+'debug.csv', transform_test)
 
     return trainset, testset
 

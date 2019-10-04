@@ -43,22 +43,25 @@ parser.add_argument('--data_dir', default='data/', help='data directory')
 parser.add_argument('--load', default=None, help='checkpoint to load agent from')
 parser.add_argument('--cv_dir', default='cv/tmp/', help='checkpoint directory (models and logs are saved here)')
 parser.add_argument('--batch_size', type=int, default=256, help='batch size')
+parser.add_argument('--img_size', type=int, default=448, help='PN Image Size')
 parser.add_argument('--epoch_step', type=int, default=10000, help='epochs after which lr is decayed')
 parser.add_argument('--max_epochs', type=int, default=10000, help='total epochs to run')
 parser.add_argument('--parallel', action ='store_true', default=False, help='use multiple GPUs for training')
+parser.add_argument('--coarse_level_only', action ='store_true', default=False, help='Two or Single Step')
 parser.add_argument('--penalty', type=float, default=-0.5, help='gamma: reward for incorrect predictions')
 parser.add_argument('--alpha', type=float, default=0.8, help='probability bounding factor')
-parser.add_argument('--sigma', type=float, default=0.1, help='multiplier for the entropy loss')
+parser.add_argument('--beta', type=float, default=0.1, help='Coarse detector increment')
+parser.add_argument('--sigma', type=float, default=0.5, help='cost for patch use')
 args = parser.parse_args()
 
 if not os.path.exists(args.cv_dir):
-    os.system('mkdir ' + args.cv_dir)
+    os.makedirs(args.cv_dir)
 utils.save_args(__file__, args)
 
 def train(epoch):
     # This steps trains the policy network
     agent.train()
-    matches, rewards, rewards_baseline, policies = [], [], [], []
+    matches, rewards, rewards_baseline, policies, metrics, set_labels = [], [], [], [], [], []
     for batch_idx, (inputs, targets) in tqdm.tqdm(enumerate(trainloader), total=len(trainloader)):
         inputs = Variable(inputs)
         if not args.parallel:
@@ -79,13 +82,13 @@ def train(epoch):
         policy_map = Variable(policy_map)
 
         # Get the batch wise metrics
-        agent_acc_map = utils.get_accuracy_agent(policy_map, targets, num_windows_cd, num_windows_fd, base_dir_fd, base_dir_cd, base_dir_gt)
-        agent_acc_sample = utils.get_accuracy_agent(policy_sample, targets, num_windows_cd, num_windows_fd, base_dir_fd, base_dir_cd, base_dir_gt)
+        agent_acc_map = 0 # utils.get_accuracy_agent(policy_map, targets, num_windows_cd, num_windows_fd, base_dir_fd, base_dir_cd, base_dir_gt)
+        agent_acc_sample = 0 # utils.get_accuracy_agent(policy_sample, targets, num_windows_cd, num_windows_fd, base_dir_fd, base_dir_cd, base_dir_gt)
         offset_fd, offset_cd = utils.read_offsets(targets, base_dir_reward_fd, base_dir_reward_cd, num_actions_coarse)
 
         # Find the reward for baseline and sampled policy
-        reward_map = utils.compute_reward(offset_fd, offset_cd, agent_acc_map, policy_map.data)
-        reward_sample = utils.compute_reward(offset_fd, offset_cd, agent_acc_sample, policy_sample.data)
+        reward_map = utils.compute_reward(offset_fd, offset_cd, agent_acc_map, policy_map.data, args.beta, args.sigma)
+        reward_sample = utils.compute_reward(offset_fd, offset_cd, agent_acc_sample, policy_sample.data, args.beta, args.sigma)
         advantage = reward_sample.cuda().float() - reward_map.cuda().float()
 
         # Find the loss for only the policy network
@@ -103,6 +106,7 @@ def train(epoch):
 
     reward, sparsity, variance, policy_set = utils.performance_stats(policies, rewards)
 
+    # Compute the Precision and Recall Performance of the Agent and Detectors
     print 'Train: %d | Rw: %.2E | S: %.3f | V: %.3f | #: %d'%(epoch, reward, sparsity, variance, len(policy_set))
 
     log_value('train_reward', reward, epoch)
@@ -135,13 +139,17 @@ def test(epoch):
         offset_fd, offset_cd = utils.read_offsets(targets, base_dir_reward_fd, base_dir_reward_cd, num_actions_coarse)
 
         # Find the reward for baseline and sampled policy
-        agent_acc = utils.get_accuracy_agent(policy, targets, num_windows_cd, num_windows_fd, base_dir_fd, base_dir_cd, base_dir_gt)
+        agent_acc = 0 # utils.get_accuracy_agent(policy, targets, num_windows_cd, num_windows_fd, base_dir_fd, base_dir_cd, base_dir_gt)
 
-        reward = utils.compute_reward(offset_fd, offset_cd, agent_acc, policy.data)
-        outputs, targets, batch_labels = utils.get_detected_boxes_coarse(policy, targets, num_windows_cd, num_windows_fd, base_dir_fd,
-                            base_dir_cd, base_dir_gt)
+        reward = utils.compute_reward(offset_fd, offset_cd, agent_acc, policy.data, args.beta, args.sigma)
+        if args.coarse_level_only:
+            outputs, targets, batch_labels = utils.get_detected_boxes(policy, targets, num_windows_cd, base_dir_fd,
+                                base_dir_cd, base_dir_gt)
+        else:
+            outputs, targets, batch_labels = utils.get_detected_boxes_coarse(policy, targets, num_windows_cd, num_windows_fd,
+                                base_dir_fd, base_dir_cd, base_dir_gt)
+
         metrics += utils_detector.get_batch_statistics(outputs, targets, 0.5)
-
         set_labels += batch_labels.tolist()
         rewards.append(reward)
         policies.append(policy.data)
@@ -150,14 +158,14 @@ def test(epoch):
     true_positives, pred_scores, pred_labels = [np.concatenate(x, 0) for x in list(zip(*metrics))]
     precision, recall, AP, f1, ap_class = utils_detector.ap_per_class(true_positives, pred_scores, pred_labels, set_labels)
 
-    print 'Test - AP: %.3f | AR : %.3f'%(AP[0], recall[0])
+    print 'Test - AP: %.3f | AR : %.3f'%(AP, recall.mean())
     reward, sparsity, variance, policy_set = utils.performance_stats(policies, rewards)
 
     print 'Test - Rw: %.2E | S: %.3f | V: %.3f | #: %d'%(reward, sparsity, variance, len(policy_set))
 
     log_value('test_reward', reward, epoch)
     log_value('test_AP', AP[0], epoch)
-    log_value('test_AR', recall[0], epoch)
+    log_value('test_AR', recall.mean(), epoch)
     log_value('test_sparsity', sparsity, epoch)
     log_value('test_variance', variance, epoch)
     log_value('test_unique_policies', len(policy_set), epoch)
@@ -172,7 +180,7 @@ def test(epoch):
     }
     torch.save(state, args.cv_dir+'/ckpt_E_%d_R_%.2E'%(epoch, reward))
 #--------------------------------------------------------------------------------------------------------#
-trainset, testset = utils.get_dataset(args.model, args.data_dir)
+trainset, testset = utils.get_dataset(args.model, args.img_size, args.data_dir)
 trainloader = torchdata.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=16)
 testloader = torchdata.DataLoader(testset, batch_size=args.batch_size, shuffle=False, num_workers=16)
 agent = utils.get_model(args.model, num_actions_coarse)
@@ -192,10 +200,12 @@ agent.cuda()
 
 # Update the parameters of the policy network
 optimizer = optim.Adam(agent.parameters(), lr=args.lr)
+lr_scheduler = optim.lr_scheduler.MultiStepLR(optimizer, [100, 1000])
 
 # Save the args to the checkpoint directory
 configure(args.cv_dir+'/log', flush_secs=5)
 for epoch in range(start_epoch, start_epoch+args.max_epochs+1):
-    train(epoch)
+    # train(epoch)
     if epoch % 10 == 0:
         test(epoch)
+    lr_scheduler.step()
