@@ -25,7 +25,7 @@ from tensorboard_logger import configure, log_value
 from torch.distributions import Multinomial, Bernoulli
 
 from utils import utils, utils_detector
-from constants import base_dir_gt, base_dir_cd, base_dir_fd, base_dir_reward_cd, base_dir_reward_fd
+from constants import base_dir_groundtruth, base_dir_detections_cd, base_dir_detections_fd, base_dir_metric_cd, base_dir_metric_fd
 from constants import num_actions, num_windows
 
 parser = argparse.ArgumentParser(description='PolicyNetworkTraining')
@@ -122,7 +122,7 @@ def test(epoch):
         policy = Variable(policy)
 
         # Compute the Batch-wise metrics
-        offset_fd, offset_cd = utils.read_offsets(targets, base_dir_reward_fd, base_dir_reward_cd, num_actions)
+        offset_fd, offset_cd = utils.read_offsets(targets, base_dir_metric_fd, base_dir_metric_cd, num_actions)
 
         reward = utils.compute_reward(offset_fd, offset_cd, policy.data, args.beta, args.sigma)
         metrics, set_labels = utils.get_detected_boxes(policy, targets, metrics, set_labels)
