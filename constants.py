@@ -1,24 +1,9 @@
-# Constants for xView
-# base_dir_fd = '/atlas/u/buzkent/PyTorch-YOLOv3/data/custom/xview_full/fd_txt/'
-# base_dir_cd = '/atlas/u/buzkent/PyTorch-YOLOv3/data/custom/xview_full/64_320_txt/'
-# base_dir_gt = '/atlas/u/buzkent/PyTorch-YOLOv3/data/custom/labels_60class/'
-# base_dir_reward_fd = '/atlas/u/buzkent/EfficientObjectDetection/data/xView/reward_fd_AP/'
-# base_dir_reward_cd = '/atlas/u/buzkent/EfficientObjectDetection/data/xView/reward_fd_64_AP/'
-# num_actions_coarse = 16
-# num_actions_fine = 4
-# num_windows_cd = 4
-# num_windows_fd = 2
-# img_size_fd = 112
-
-
-# Constants for CPD
-base_dir_fd = '/atlas/u/buzkent/PyTorch-YOLOv3/data/custom/cpd_full/fd_txt/'
-base_dir_cd = '/atlas/u/buzkent/PyTorch-YOLOv3/data/custom/cpd_full/64_txt/'
-base_dir_gt = '/atlas/u/buzkent/PyTorch-YOLOv3/data/custom/labels_cpd/'
-base_dir_reward_fd = '/atlas/u/buzkent/EfficientObjectDetection/data/cpd/reward_fd_AP/'
-base_dir_reward_cd = '/atlas/u/buzkent/EfficientObjectDetection/data/cpd/reward_64_AP/'
-num_actions_coarse = 9
-num_actions_fine = 4
-num_windows_cd = 3
-num_windows_fd = 2
-img_size_fd = 112
+base_dir_fd = '...' # Directory that contains detections by fine level detector
+base_dir_cd = '...' # Directory that contains detections by coarse level detector
+base_dir_gt = '...' # Directory that contains ground truth bounding boxes
+base_dir_reward_fd = '...' # Directory that contains AP or AR values by the fine detector
+base_dir_reward_cd = '...' # Directory that contains AP or AR values by the coarse detector
+num_actions = 9 # Hyperparameter, should be equal to num_windows * num_windows
+num_windows = 3 # Number of windows in one dimension
+img_size_fd = 320 # Image size used to train the fine level detector
+img_size_cd = 64 # Image size used to train the coarse level detector

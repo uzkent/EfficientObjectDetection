@@ -40,56 +40,35 @@ def xywh2xyxy(x):
 def get_detected_boxes(policy, file_dirs, metrics, set_labels):
     for index, file_dir_st in enumerate(file_dirs):
          counter, outputs_img = 0, np.zeros((1,7))
-         for xind in range(num_windows_cd):
-             for yind in range(num_windows_cd):
-                 for xind2 in range(num_windows_fd):
-                     for yind2 in range(num_windows_fd):
-                         # ---------------- Read Ground Truth ----------------------------------
-                         outputs_all = []
-                         gt_path = '{}{}_{}_{}_{}_{}.txt'.format(base_dir_gt, file_dir_st, str(xind), str(yind), str(xind2), str(yind2))
-                         if os.path.exists(gt_path):
-                             gt = np.loadtxt(gt_path).reshape([-1, 5])
-                             targets = np.hstack((np.zeros((gt.shape[0], 1)), gt))
-                             targets[:, 2:] = xywh2xyxy(targets[:, 2:])
-                             # ----------------- Read Detections -------------------------------
-                             if policy[index, counter] == 1:
-                                 preds_dir = '{}{}_{}_{}_{}_{}'.format(base_dir_fd, file_dir_st, str(xind), str(yind), str(xind2), str(yind2))
-                                 targets[:, 2:] *= img_size_fd
-                                 if os.path.exists(preds_dir):
-                                     preds = np.loadtxt(preds_dir).reshape([-1,7])
-                                     outputs_all.append(torch.from_numpy(preds))
-                             else:
-                                 preds_dir = '{}{}_{}_{}_{}_{}_ds1'.format(base_dir_cd, file_dir_st, str(xind), str(yind), str(xind2), str(yind2))
-                                 targets[:, 2:] *= img_size_cd
-                                 if os.path.exists(preds_dir):
-                                     preds = np.loadtxt(preds_dir).reshape([-1,7])
-                                     outputs_all.append(torch.from_numpy(preds))
-                             set_labels += targets[:, 1].tolist()
-                             metrics += utils_detector.get_batch_statistics(outputs_all, torch.from_numpy(targets), 0.5)
-                         else:
-                             continue
+         for xind in range(num_windows):
+             for yind in range(num_windows):
+                 # ---------------- Read Ground Truth ----------------------------------
+                 outputs_all = []
+                 gt_path = '{}{}_{}_{}_{}_{}.txt'.format(base_dir_gt, file_dir_st, str(xind), str(yind))
+                 if os.path.exists(gt_path):
+                     gt = np.loadtxt(gt_path).reshape([-1, 5])
+                     targets = np.hstack((np.zeros((gt.shape[0], 1)), gt))
+                     targets[:, 2:] = xywh2xyxy(targets[:, 2:])
+                     # ----------------- Read Detections -------------------------------
+                     if policy[index, counter] == 1:
+                         preds_dir = '{}{}_{}_{}_{}_{}'.format(base_dir_fd, file_dir_st, str(xind), str(yind))
+                         targets[:, 2:] *= img_size_fd
+                         if os.path.exists(preds_dir):
+                             preds = np.loadtxt(preds_dir).reshape([-1,7])
+                             outputs_all.append(torch.from_numpy(preds))
+                     else:
+                         preds_dir = '{}{}_{}_{}_{}_{}'.format(base_dir_cd, file_dir_st, str(xind), str(yind))
+                         targets[:, 2:] *= img_size_cd
+                         if os.path.exists(preds_dir):
+                             preds = np.loadtxt(preds_dir).reshape([-1,7])
+                             outputs_all.append(torch.from_numpy(preds))
+                     set_labels += targets[:, 1].tolist()
+                     metrics += utils_detector.get_batch_statistics(outputs_all, torch.from_numpy(targets), 0.5)
+                 else:
+                     continue
                  counter += 1
 
     return metrics, set_labels
-
-def get_accuracy_agent(policy, file_ids, num_windows_cd, num_windows_fd, base_dir_fd, base_dir_cd, base_dir_gt, coarse=True):
-    agent_acc = torch.zeros((policy.size(0)))
-    for index in range(len(file_ids)):
-        if coarse:
-            outputs, targets, batch_labels = get_detected_boxes_coarse(policy[index, :].reshape([1,-1]), [file_ids[index]], num_windows_cd,
-                                    num_windows_fd, base_dir_fd, base_dir_cd, base_dir_gt)
-        else:
-            outputs, targets, batch_labels = get_detected_boxes(policy[index, :].reshape([1,-1]), [file_ids[index]], num_windows_fd,
-                                    base_dir_fd, base_dir_cd, base_dir_gt)
-        try:
-            metrics = utils_detector.get_batch_statistics(outputs, targets, 0.5)
-            true_positives, pred_scores, pred_labels = [np.concatenate(x, 0) for x in list(zip(*metrics))]
-            recall = utils_detector.ar_per_class(true_positives, pred_scores, pred_labels, batch_labels.tolist())
-            agent_acc[index] = recall[0]
-        except Exception as error:
-            agent_acc[index] = 1
-
-    return agent_acc
 
 def read_offsets(image_ids, base_dir_fd, base_dir_cd, num_actions):
     offset_fd = torch.zeros((len(image_ids), num_actions)).cuda()
@@ -182,9 +161,9 @@ def agent_chosen_input(input_org, policy, mappings, interval):
     return input_org.cuda()
 
 def action_space_model(fine=True):
+    # Model the action space by dividing the image space into equal size patches
     img_size = 175
     interval = 55
-    # Model the action space by dividing the image space into equal size patches
     mappings = []
     for cl in range(0, img_size, interval):
         for rw in range(0, img_size, interval):
