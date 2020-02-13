@@ -3,6 +3,8 @@
 This repository contains PyTorch implementation of our IEEE WACV20 paper on Efficient Object Detection in Large
 Images with Deep Reinforcement Learning. The arxiv version of the paper can be found [here](https://arxiv.org/abs/1912.03966).
 
+<img src="./figures/framework.png" alt="WAMI_Positives" style="width: 300px;"/>
+
 ## Object Detectors
 ### Training Object Detectors
 We train two different detectors: (1) **Fine level** object detector and (2) **Coarse level** object detector. To parameterize
