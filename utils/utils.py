@@ -15,7 +15,7 @@ import torch.nn.functional as F
 import time
 from random import randint, sample
 
-from dataset.xView_dataloader import CustomDatasetFromImages
+from dataset.dataloader import CustomDatasetFromImages
 from constants import base_dir_gt, base_dir_cd, base_dir_fd, base_dir_reward_cd, base_dir_reward_fd
 from constants import num_actions, num_windows, img_size_fd, img_size_cd
 
