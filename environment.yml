@@ -1,0 +1,9 @@
+dependencies:
+- python=2.7.1
+- pytorch=0.4
+- pip:
+  - Pillow==5.0.0
+  - numpy==1.14.1
+  - tensorboard_logger
+  - tqdm
+  - argparse
