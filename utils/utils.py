@@ -71,7 +71,7 @@ def get_detected_boxes_coarse(policy, file_dirs, num_windows_cd, num_windows_fd,
 
     return metrics, set_labels
 
-def get_detected_boxes(policy, file_dirs, num_windows, base_dir_fd, base_dir_cd, base_dir_gt, metrics, set_labels):#, zoomed_ins, num_objects):
+def get_detected_boxes_fine(policy, file_dirs, num_windows, base_dir_fd, base_dir_cd, base_dir_gt, metrics, set_labels)
     for index, file_dir_st in enumerate(file_dirs):
          counter = -1
          for xind in range(num_windows):
@@ -84,17 +84,14 @@ def get_detected_boxes(policy, file_dirs, num_windows, base_dir_fd, base_dir_cd,
                      gt_temp = np.loadtxt(gt_path).reshape([-1, 5])
                      targets = np.hstack((np.zeros((gt_temp.shape[0], 1)), gt_temp))
                      targets[:, 2:] = xywh2xyxy(targets[:, 2:])
-                     # num_objects.append(gt.shape[0]) #np.mean(1000 * gt[:, 4] * gt[:, 5]))
                      # ---------------- Read Detections -------------------------------
                      if policy[index, counter] == 1:
-                         # zoomed_ins.append(1)
                          targets[:, 2:] *= img_size_fd
                          preds_dir = '{}{}_{}_{}'.format(base_dir_fd, file_dir_st, str(xind), str(yind))
                          if os.path.exists(preds_dir):
                              preds = np.loadtxt(preds_dir).reshape([-1,7])
                              outputs_all.append(torch.from_numpy(preds))
                      else:
-                         #zoomed_ins.append(0)
                          targets[:, 2:] *= img_size_cd
                          preds_dir = '{}{}_{}_{}_ds1'.format(base_dir_cd, file_dir_st, str(xind), str(yind))
                          if os.path.exists(preds_dir):
@@ -103,10 +100,7 @@ def get_detected_boxes(policy, file_dirs, num_windows, base_dir_fd, base_dir_cd,
                      metrics += utils_detector.get_batch_statistics(outputs_all, torch.from_numpy(targets), 0.5)
                      set_labels += targets[:, 1].tolist()
                  else:
-                     #num_objects.append(0)
-                     #zoomed_ins.append(0)
                      continue
-                 # ----------------------------------------------------------------
 
     return metrics, set_labels
 
@@ -157,13 +151,13 @@ def compute_reward(offset_fd, offset_cd, reward_patch_acc, policy, beta, sigma):
     # Reward function favors policies that drops patches only if the classifier
     # successfully categorizes the image
     offset_cd += beta
-    reward_patch_diff = (offset_fd - 0*offset_cd)*policy + -1*((offset_fd - 0*offset_cd)*(1-policy))
+    reward_patch_diff = (offset_fd - offset_cd)*policy + -1*((offset_fd - offset_cd)*(1-policy))
     reward_patch_acqcost = (policy.size(1) - policy.sum(dim=1)) / policy.size(1)
-    reward_img = (0.1) * reward_patch_diff.sum(dim=1) + sigma * reward_patch_acqcost
+    reward_img = reward_patch_diff.sum(dim=1) + sigma * reward_patch_acqcost
     reward = reward_img.unsqueeze(1)
     return reward.float()
 
-def get_transforms(rnet, dset, img_size):
+def get_transforms(img_size):
     mean = [0.485, 0.456, 0.406]
     std = [0.229, 0.224, 0.225]
     transform_train = transforms.Compose([
@@ -208,8 +202,6 @@ def rearrange_batch(inputs, targets, selected_index, train_time=True, num_window
 
 def agent_chosen_input(input_org, policy, mappings, interval):
     """ Make the inputs variable size images using the determined policy
-        The high resolution images (32x32 C10) will be changed to low resolution images (24x24 C10)
-        if the action is set to 0.
     """
     input_full = input_org.clone()
     sampled_img = torch.zeros([input_org.shape[0], input_org.shape[1], input_org.shape[2], input_org.shape[3]])
@@ -237,10 +229,8 @@ def action_space_model(dset, fine=True):
     return mappings, img_size, interval
 
 
-# Pick from the datasets available and the hundreds of models we have lying around depending on the requirements.
-def get_dataset(model, img_size, root='data/'):
-    rnet, dset = model.split('_')
-    transform_train, transform_test = get_transforms(rnet, dset, img_size)
+def get_dataset(img_size, root='data/'):
+    transform_train, transform_test = get_transforms(img_size)
     trainset = CustomDatasetFromImages(root+'train.csv', transform_train)
     testset = CustomDatasetFromImages(root+'valid.csv', transform_test)
 
@@ -252,8 +242,7 @@ def set_parameter_requires_grad(model, feature_extracting):
         for param in model.parameters():
             param.requires_grad = False
 
-def get_model(model, num_output=16):
-    os.environ['TORCH_MODEL_ZOO'] = '/atlas/u/buzkent/EfficientObjectDetection/cv/pretrained/'
+def get_model(num_output=16):
     agent = torchmodels.resnet34(pretrained=True)
     set_parameter_requires_grad(agent, False)
     num_ftrs = agent.fc.in_features

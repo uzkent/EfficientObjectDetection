@@ -1,8 +1,5 @@
 """
-This function pretrains the policy network using the high resolution classifier
-output-explained as pretraining the policy network in the paper.
-How to Run on the CIFAR10 and CIFAR100 Datasets:
-    python pretrain.py --model R32_C10, R32_C100
+python pretrain.py --model R32_C10, R32_C100
        --lr 1e-3
        --cv_dir checkpoint directory
        --batch_size 512
@@ -17,28 +14,26 @@ How to Run on the fMoW Dataset:
 import os
 import torch
 import torch.autograd as autograd
-from torch.autograd import Variable
 import torch.utils.data as torchdata
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-import pdb
 import random
 import tqdm
+import torch.optim as optim
+import torch.backends.cudnn as cudnn
+cudnn.benchmark = True
+import argparse
+from torch.autograd import Variable
+from tensorboard_logger import configure, log_value
+from torch.distributions import Multinomial, Bernoulli
+
 from utils import utils, utils_detector
 from constants import base_dir_gt, base_dir_cd, base_dir_fd, base_dir_reward_cd, base_dir_reward_fd
 from constants import num_actions_coarse, num_windows_cd, num_windows_fd
-import torch.optim as optim
 
-from tensorboard_logger import configure, log_value
-from torch.distributions import Multinomial, Bernoulli
-import torch.backends.cudnn as cudnn
-cudnn.benchmark = True
-
-import argparse
 parser = argparse.ArgumentParser(description='SingleStageApproach')
 parser.add_argument('--lr', type=float, default=1e-3, help='learning rate')
-parser.add_argument('--model', default='R32_C10', help='R<depth>_<dataset> see utils.py for a list of configurations')
 parser.add_argument('--data_dir', default='data/', help='data directory')
 parser.add_argument('--load', default=None, help='checkpoint to load agent from')
 parser.add_argument('--cv_dir', default='cv/tmp/', help='checkpoint directory (models and logs are saved here)')
@@ -59,7 +54,6 @@ if not os.path.exists(args.cv_dir):
 utils.save_args(__file__, args)
 
 def train(epoch):
-    # This steps trains the policy network
     agent.train()
     matches, rewards, rewards_baseline, policies, metrics, set_labels = [], [], [], [], [], []
     for batch_idx, (inputs, targets) in tqdm.tqdm(enumerate(trainloader), total=len(trainloader)):
@@ -67,12 +61,12 @@ def train(epoch):
         if not args.parallel:
     	    inputs = inputs.cuda()
 
-        # Get the low resolution agent images
+        # Actions by the Agent
         probs = F.sigmoid(agent.forward(inputs))
-        alpha_hp = np.clip(args.alpha + epoch * 0.001, 0.5, 0.95)
+        alpha_hp = np.clip(args.alpha + epoch * 0.001, 0.6, 0.95)
         probs = probs*alpha_hp + (1-alpha_hp) * (1-probs)
 
-        # Sample the policies from the Bernoulli distribution characterized by agent's output
+        # Sample the policies from the Bernoulli distribution characterized by agent
         distr = Bernoulli(probs)
         policy_sample = distr.sample()
 
@@ -83,13 +77,11 @@ def train(epoch):
         policy_map = Variable(policy_map)
 
         # Get the batch wise metrics
-        agent_acc_map = 0 # utils.get_accuracy_agent(policy_map, targets, num_windows_cd, num_windows_fd, base_dir_fd, base_dir_cd, base_dir_gt)
-        agent_acc_sample = 0 # utils.get_accuracy_agent(policy_sample, targets, num_windows_cd, num_windows_fd, base_dir_fd, base_dir_cd, base_dir_gt)
         offset_fd, offset_cd = utils.read_offsets(targets, base_dir_reward_fd, base_dir_reward_cd, num_actions_coarse)
 
         # Find the reward for baseline and sampled policy
-        reward_map = utils.compute_reward(offset_fd, offset_cd, agent_acc_map, policy_map.data, args.beta, args.sigma)
-        reward_sample = utils.compute_reward(offset_fd, offset_cd, agent_acc_sample, policy_sample.data, args.beta, args.sigma)
+        reward_map = utils.compute_reward(offset_fd, offset_cd, , policy_map.data, args.beta, args.sigma)
+        reward_sample = utils.compute_reward(offset_fd, offset_cd, policy_sample.data, args.beta, args.sigma)
         advantage = reward_sample.cuda().float() - reward_map.cuda().float()
 
         # Find the loss for only the policy network
@@ -117,7 +109,6 @@ def train(epoch):
     log_value('train_unique_policies', len(policy_set), epoch)
 
 def test(epoch):
-    # Test the policy network
     agent.eval()
 
     matches, rewards, metrics, policies, set_labels = [], [], [], [], []
@@ -127,7 +118,7 @@ def test(epoch):
         if not args.parallel:
             inputs = inputs.cuda()
 
-        # Get the low resolution agent images
+        # Actions by the Policy Network
         probs = F.sigmoid(agent(inputs))
 
         # Sample the policy from the agents output
@@ -138,13 +129,10 @@ def test(epoch):
 
         # Compute the Batch-wise metrics
         offset_fd, offset_cd = utils.read_offsets(targets, base_dir_reward_fd, base_dir_reward_cd, num_actions_coarse)
-        # policy = ((offset_fd > offset_cd) > 0.0).float()
-        # Find the reward for baseline and sampled policy
-        agent_acc = 0 #utils.get_accuracy_agent(policy, targets, num_windows_cd, num_windows_fd, base_dir_fd, base_dir_cd, base_dir_gt)
 
-        reward = utils.compute_reward(offset_fd, offset_cd, agent_acc, policy.data, args.beta, args.sigma)
+        reward = utils.compute_reward(offset_fd, offset_cd, policy.data, args.beta, args.sigma)
         if args.coarse_level_only:
-            metrics, set_labels = utils.get_detected_boxes(policy, targets, num_windows_cd, base_dir_fd,
+            metrics, set_labels = utils.get_detected_boxes_fine(policy, targets, num_windows_cd, base_dir_fd,
                                 base_dir_cd, base_dir_gt, metrics, set_labels)
         else:
             metrics, set_labels = utils.get_detected_boxes_coarse(policy, targets, num_windows_cd, num_windows_fd,
@@ -179,10 +167,10 @@ def test(epoch):
     }
     torch.save(state, args.cv_dir+'/ckpt_E_%d_R_%.2E'%(epoch, reward))
 #--------------------------------------------------------------------------------------------------------#
-trainset, testset = utils.get_dataset(args.model, args.img_size, args.data_dir)
+trainset, testset = utils.get_dataset(args.img_size, args.data_dir)
 trainloader = torchdata.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=16)
-testloader = torchdata.DataLoader(testset, batch_size=args.batch_size/2, shuffle=False, num_workers=4)
-agent = utils.get_model(args.model, num_actions_coarse)
+testloader = torchdata.DataLoader(testset, batch_size=args.batch_size, shuffle=False, num_workers=4)
+agent = utils.get_model(num_actions_coarse)
 
 # ---- Load the pre-trained model ----------------------
 start_epoch = 0
