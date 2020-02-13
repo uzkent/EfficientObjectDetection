@@ -4,12 +4,6 @@ python pretrain.py --model R32_C10, R32_C100
        --cv_dir checkpoint directory
        --batch_size 512
        --ckpt_hr_cl Load the checkpoint from the directory (hr_classifier)
-How to Run on the fMoW Dataset:
-    python pretrain.py --model R34_fMoW
-       --lr 1e-3
-       --cv_dir checkpoint directory
-       --batch_size 1024
-       --ckpt_hr_cl Load the checkpoint from the directory (hr_classifier)
 """
 import os
 import torch
@@ -32,7 +26,7 @@ from utils import utils, utils_detector
 from constants import base_dir_gt, base_dir_cd, base_dir_fd, base_dir_reward_cd, base_dir_reward_fd
 from constants import num_actions_coarse, num_windows_cd, num_windows_fd
 
-parser = argparse.ArgumentParser(description='SingleStageApproach')
+parser = argparse.ArgumentParser(description='PolicyNetworkTraining')
 parser.add_argument('--lr', type=float, default=1e-3, help='learning rate')
 parser.add_argument('--data_dir', default='data/', help='data directory')
 parser.add_argument('--load', default=None, help='checkpoint to load agent from')
@@ -159,7 +153,7 @@ def test(epoch):
       'reward': reward,
     }
     torch.save(state, args.cv_dir+'/ckpt_E_%d_R_%.2E'%(epoch, reward))
-    
+
 #--------------------------------------------------------------------------------------------------------#
 trainset, testset = utils.get_dataset(args.img_size, args.data_dir)
 trainloader = torchdata.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=16)
@@ -181,7 +175,6 @@ agent.cuda()
 
 # Update the parameters of the policy network
 optimizer = optim.Adam(agent.parameters(), lr=args.lr)
-lr_scheduler = optim.lr_scheduler.MultiStepLR(optimizer, [100, 1000])
 
 # Save the args to the checkpoint directory
 configure(args.cv_dir+'/log', flush_secs=5)
@@ -189,4 +182,3 @@ for epoch in range(start_epoch, start_epocH+args.max_epochs+1):
     train(epoch)
     if epoch % 10 == 0:
         test(epoch)
-    lr_scheduler.step()
