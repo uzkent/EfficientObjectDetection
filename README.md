@@ -33,6 +33,36 @@ The matrix is then saved into a numpy file in the following format: ``'{}{}.form
 
 Finally, we should enter the directories of the folders created in this section into the *constants.py* file.
 
+```
+├── ./data/your_dataset/
+│   ├── base_dir_detections_fd
+|             image1_0_0.npy
+|             image1_0_1.npy
+|             .
+|             .
+|             .
+|             image1_0_1.npy
+│   ├── base_dir_detections_cd
+|             image1_0_0.npy
+|             image1_0_1.npy
+|             .
+|             .
+|             .
+|             image1_0_1.npy
+│   ├── base_dir_groundtruth
+|             image1_0_0.npy
+|             image1_0_1.npy
+|             .
+|             .
+|             .
+|             image1_0_1.npy
+│   ├── base_dir_metric_fd
+|             image1.npy
+|             .
+|             .
+|             .
+```
+
 ## Training the Policy Network
 In the next step, we train the Policy Network and test the policy network. First, we need to have large training and test images. In the paper, we perform experiments on the xView and Caltech-Pedestrian Detection datasets. By a large image, we refer to images that have more than **1000px** in each dimension. We need to list the training and test large images in a csv file as follows.
 ```
