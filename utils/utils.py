@@ -17,7 +17,7 @@ from random import randint, sample
 
 from dataset.xView_dataloader import CustomDatasetFromImages
 from constants import base_dir_gt, base_dir_cd, base_dir_fd, base_dir_reward_cd, base_dir_reward_fd
-from constants import num_actions_coarse, num_windows_cd, num_windows_fd, img_size_fd, img_size_cd
+from constants import num_actions, num_windows, img_size_fd, img_size_cd
 
 def save_args(__file__, args):
     shutil.copy(os.path.basename(__file__), args.cv_dir)
@@ -70,12 +70,12 @@ def get_detected_boxes(policy, file_dirs, metrics, set_labels):
 
     return metrics, set_labels
 
-def read_offsets(image_ids, base_dir_fd, base_dir_cd, num_actions):
+def read_offsets(image_ids, num_actions):
     offset_fd = torch.zeros((len(image_ids), num_actions)).cuda()
     offset_cd = torch.zeros((len(image_ids), num_actions)).cuda()
     for index, img_id in enumerate(image_ids):
-        offset_fd[index, :] = torch.from_numpy(np.loadtxt('{}{}'.format(base_dir_fd, img_id)).flatten())
-        offset_cd[index, :] = torch.from_numpy(np.loadtxt('{}{}'.format(base_dir_cd, img_id)).flatten())
+        offset_fd[index, :] = torch.from_numpy(np.loadtxt('{}{}'.format(base_dir_reward_fd, img_id)).flatten())
+        offset_cd[index, :] = torch.from_numpy(np.loadtxt('{}{}'.format(base_dir_reward_cd, img_id)).flatten())
 
     return offset_fd, offset_cd
 
@@ -122,55 +122,6 @@ def get_transforms(img_size):
 
     return transform_train, transform_test
 
-def rearrange_batch(inputs, targets, selected_index, train_time=True, num_windows=3, img_size=55):
-    num_actions = num_windows * num_windows
-    if train_time:
-        inputs_partitioned = torch.zeros((inputs.size(0), 3, img_size, img_size))
-    else:
-        inputs_partitioned = torch.zeros((num_actions*inputs.size(0), 3, img_size, img_size))
-    counter, targets_partitioned = 0, []
-    for ind in range(inputs.size(0)):
-        for xind in range(num_windows):
-            for yind in range(num_windows):
-                x1 = xind*img_size
-                x2 = x1 + img_size
-                y1 = yind*img_size
-                y2 = y1 + img_size
-                if train_time:
-                    if (xind*num_windows+yind) == selected_index:
-                        inputs_partitioned[ind, :, :, :] = inputs[ind, :, x1:x2, y1:y2]
-                        targets_partitioned.append('{}_{}_{}'.format(str(targets[ind].cpu().numpy().tolist()), str(xind), str(yind)))
-                else:
-                    inputs_partitioned[counter, :, :, :] = inputs[ind, :, x1:x2, y1:y2]
-                    targets_partitioned.append('{}_{}_{}'.format(str(targets[ind]), str(xind), str(yind)))
-                    counter += 1
-
-    return inputs_partitioned, tuple(targets_partitioned)
-
-def agent_chosen_input(input_org, policy, mappings, interval):
-    """ Make the inputs variable size images using the determined policy
-    """
-    input_full = input_org.clone()
-    sampled_img = torch.zeros([input_org.shape[0], input_org.shape[1], input_org.shape[2], input_org.shape[3]])
-    for pl_ind in range(policy.shape[1]):
-        mask = (policy[:, pl_ind] == 1).cpu()
-        sampled_img[:, :, mappings[pl_ind][0]:mappings[pl_ind][0]+interval, mappings[pl_ind][1]:mappings[pl_ind][1]+interval] = input_full[:, :, mappings[pl_ind][0]:mappings[pl_ind][0]+interval, mappings[pl_ind][1]:mappings[pl_ind][1]+interval]
-        sampled_img[:, :, mappings[pl_ind][0]:mappings[pl_ind][0]+interval, mappings[pl_ind][1]:mappings[pl_ind][1]+interval] *= mask.unsqueeze(1).unsqueeze(1).unsqueeze(1).float()
-    input_org = sampled_img
-
-    return input_org.cuda()
-
-def action_space_model(fine=True):
-    # Model the action space by dividing the image space into equal size patches
-    img_size = 175
-    interval = 55
-    mappings = []
-    for cl in range(0, img_size, interval):
-        for rw in range(0, img_size, interval):
-            mappings.append([cl, rw])
-
-    return mappings, img_size, interval
-
 def get_dataset(img_size, root='data/'):
     transform_train, transform_test = get_transforms(img_size)
     trainset = CustomDatasetFromImages(root+'train.csv', transform_train)
@@ -184,7 +135,7 @@ def set_parameter_requires_grad(model, feature_extracting):
         for param in model.parameters():
             param.requires_grad = False
 
-def get_model(num_output=16):
+def get_model(num_output):
     agent = torchmodels.resnet34(pretrained=True)
     set_parameter_requires_grad(agent, False)
     num_ftrs = agent.fc.in_features

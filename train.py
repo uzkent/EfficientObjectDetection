@@ -1,9 +1,11 @@
 """
-python pretrain.py --model R32_C10, R32_C100
-       --lr 1e-3
-       --cv_dir checkpoint directory
-       --batch_size 512
-       --ckpt_hr_cl Load the checkpoint from the directory (hr_classifier)
+How to train the Policy Network :
+    python train.py
+        --lr 1e-4
+        --cv_dir checkpoint directory
+        --batch_size 512 (more is better)
+        --data_dir directory to contain csv file
+        --alpha 0.6
 """
 import os
 import torch
@@ -24,7 +26,7 @@ from torch.distributions import Multinomial, Bernoulli
 
 from utils import utils, utils_detector
 from constants import base_dir_gt, base_dir_cd, base_dir_fd, base_dir_reward_cd, base_dir_reward_fd
-from constants import num_actions_coarse, num_windows_cd, num_windows_fd
+from constants import num_actions, num_windows
 
 parser = argparse.ArgumentParser(description='PolicyNetworkTraining')
 parser.add_argument('--lr', type=float, default=1e-3, help='learning rate')
@@ -35,8 +37,8 @@ parser.add_argument('--batch_size', type=int, default=256, help='batch size')
 parser.add_argument('--img_size', type=int, default=448, help='PN Image Size')
 parser.add_argument('--epoch_step', type=int, default=10000, help='epochs after which lr is decayed')
 parser.add_argument('--max_epochs', type=int, default=10000, help='total epochs to run')
+parser.add_argument('--num_workers', type=int, default=8, help='Number of Workers')
 parser.add_argument('--parallel', action ='store_true', default=False, help='use multiple GPUs for training')
-parser.add_argument('--penalty', type=float, default=-0.5, help='gamma: reward for incorrect predictions')
 parser.add_argument('--alpha', type=float, default=0.8, help='probability bounding factor')
 parser.add_argument('--beta', type=float, default=0.1, help='Coarse detector increment')
 parser.add_argument('--sigma', type=float, default=0.5, help='cost for patch use')
@@ -70,7 +72,7 @@ def train(epoch):
         policy_map = Variable(policy_map)
 
         # Get the batch wise metrics
-        offset_fd, offset_cd = utils.read_offsets(targets, base_dir_reward_fd, base_dir_reward_cd, num_actions_coarse)
+        offset_fd, offset_cd = utils.read_offsets(targets, num_actions)
 
         # Find the reward for baseline and sampled policy
         reward_map = utils.compute_reward(offset_fd, offset_cd, , policy_map.data, args.beta, args.sigma)
@@ -120,7 +122,7 @@ def test(epoch):
         policy = Variable(policy)
 
         # Compute the Batch-wise metrics
-        offset_fd, offset_cd = utils.read_offsets(targets, base_dir_reward_fd, base_dir_reward_cd, num_actions_coarse)
+        offset_fd, offset_cd = utils.read_offsets(targets, base_dir_reward_fd, base_dir_reward_cd, num_actions)
 
         reward = utils.compute_reward(offset_fd, offset_cd, policy.data, args.beta, args.sigma)
         metrics, set_labels = utils.get_detected_boxes(policy, targets, metrics, set_labels)
@@ -156,9 +158,9 @@ def test(epoch):
 
 #--------------------------------------------------------------------------------------------------------#
 trainset, testset = utils.get_dataset(args.img_size, args.data_dir)
-trainloader = torchdata.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=16)
-testloader = torchdata.DataLoader(testset, batch_size=args.batch_size, shuffle=False, num_workers=4)
-agent = utils.get_model(num_actions_coarse)
+trainloader = torchdata.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
+testloader = torchdata.DataLoader(testset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
+agent = utils.get_model(num_actions)
 
 # ---- Load the pre-trained model ----------------------
 start_epoch = 0
