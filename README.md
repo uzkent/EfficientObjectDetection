@@ -32,3 +32,19 @@ Additionally, we save the mAR values for each window of the large image as follo
 The matrix is then saved into a numpy file in the following format: ``'{}{}.format(image_name, detector_type)'``. If your application prioritizes precision over recall, you can use mAP values to train the Policy Network.
 
 ## Training the Policy Network
+In the next step, we train the Policy Network and test the policy network. First, we need to have large training and test images. In the paper, we perform experiments on the xView and Caltech-Pedestrian Detection datasets. By a large image, we refer to images that have more than **1000px** in each dimension. We need to list the training and test large images in a csv file as follows.
+```
+  image name, location
+  xxxxx.jpg, /path/to/folder/xxxxx.jpg
+```
+Training and test csv files can be saved as *train.csv* and *val.csv* into the *./data/dataset/* folder.
+
+Next, we train the Policy Network as follows.
+```
+python train.py
+    --lr 1e-4
+    --cv_dir checkpoint directory
+    --batch_size 512 (larger is better)
+    --data_dir directory containing csv files
+    --alpha 0.6
+```
