@@ -69,7 +69,8 @@ def train(epoch):
 
         # Get the low resolution agent images
         probs = F.sigmoid(agent.forward(inputs))
-        probs = probs*args.alpha + (1-args.alpha) * (1-probs)
+        alpha_hp = np.clip(args.alpha + epoch * 0.001, 0.5, 0.95)
+        probs = probs*alpha_hp + (1-alpha_hp) * (1-probs)
 
         # Sample the policies from the Bernoulli distribution characterized by agent's output
         distr = Bernoulli(probs)
@@ -137,20 +138,18 @@ def test(epoch):
 
         # Compute the Batch-wise metrics
         offset_fd, offset_cd = utils.read_offsets(targets, base_dir_reward_fd, base_dir_reward_cd, num_actions_coarse)
-
+        # policy = ((offset_fd > offset_cd) > 0.0).float()
         # Find the reward for baseline and sampled policy
-        agent_acc = 0 # utils.get_accuracy_agent(policy, targets, num_windows_cd, num_windows_fd, base_dir_fd, base_dir_cd, base_dir_gt)
+        agent_acc = 0 #utils.get_accuracy_agent(policy, targets, num_windows_cd, num_windows_fd, base_dir_fd, base_dir_cd, base_dir_gt)
 
         reward = utils.compute_reward(offset_fd, offset_cd, agent_acc, policy.data, args.beta, args.sigma)
         if args.coarse_level_only:
-            outputs, targets, batch_labels = utils.get_detected_boxes(policy, targets, num_windows_cd, base_dir_fd,
-                                base_dir_cd, base_dir_gt)
+            metrics, set_labels = utils.get_detected_boxes(policy, targets, num_windows_cd, base_dir_fd,
+                                base_dir_cd, base_dir_gt, metrics, set_labels)
         else:
-            outputs, targets, batch_labels = utils.get_detected_boxes_coarse(policy, targets, num_windows_cd, num_windows_fd,
-                                base_dir_fd, base_dir_cd, base_dir_gt)
+            metrics, set_labels = utils.get_detected_boxes_coarse(policy, targets, num_windows_cd, num_windows_fd,
+                                base_dir_fd, base_dir_cd, base_dir_gt, metrics, set_labels)
 
-        metrics += utils_detector.get_batch_statistics(outputs, targets, 0.5)
-        set_labels += batch_labels.tolist()
         rewards.append(reward)
         policies.append(policy.data)
 
@@ -158,7 +157,7 @@ def test(epoch):
     true_positives, pred_scores, pred_labels = [np.concatenate(x, 0) for x in list(zip(*metrics))]
     precision, recall, AP, f1, ap_class = utils_detector.ap_per_class(true_positives, pred_scores, pred_labels, set_labels)
 
-    print 'Test - AP: %.3f | AR : %.3f'%(AP, recall.mean())
+    print 'Test - AP: %.3f | AR : %.3f'%(AP[0], recall.mean())
     reward, sparsity, variance, policy_set = utils.performance_stats(policies, rewards)
 
     print 'Test - Rw: %.2E | S: %.3f | V: %.3f | #: %d'%(reward, sparsity, variance, len(policy_set))
@@ -182,7 +181,7 @@ def test(epoch):
 #--------------------------------------------------------------------------------------------------------#
 trainset, testset = utils.get_dataset(args.model, args.img_size, args.data_dir)
 trainloader = torchdata.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=16)
-testloader = torchdata.DataLoader(testset, batch_size=args.batch_size, shuffle=False, num_workers=16)
+testloader = torchdata.DataLoader(testset, batch_size=args.batch_size/2, shuffle=False, num_workers=4)
 agent = utils.get_model(args.model, num_actions_coarse)
 
 # ---- Load the pre-trained model ----------------------
@@ -204,8 +203,8 @@ lr_scheduler = optim.lr_scheduler.MultiStepLR(optimizer, [100, 1000])
 
 # Save the args to the checkpoint directory
 configure(args.cv_dir+'/log', flush_secs=5)
-for epoch in range(start_epoch, start_epoch+args.max_epochs+1):
-    # train(epoch)
+for epoch in range(start_epoch, start_epocH+args.max_epochs+1):
+    train(epoch)
     if epoch % 10 == 0:
         test(epoch)
     lr_scheduler.step()

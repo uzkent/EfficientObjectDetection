@@ -69,7 +69,8 @@ def train(epoch):
         # Get the low resolution agent images
         inputs, targets = utils.rearrange_batch(inputs, targets, random.randint(0, num_windows_cd*num_windows_cd-1))
         probs = F.sigmoid(agent.forward(inputs.cuda()))
-        probs = probs*args.alpha + (1-args.alpha) * (1-probs)
+        alpha_hp = np.clip(args.alpha + epoch * 0.001, 0.5, 0.95)
+        probs = probs*alpha_hp + (1-alpha_hp) * (1-probs)
 
         # Sample the policies from the Bernoulli distribution characterized by agent's output
         distr = Bernoulli(probs)
@@ -93,10 +94,10 @@ def train(epoch):
         reward_sample = utils.compute_reward(offset_fd, offset_cd, agent_acc_sample, policy_sample.data, args.beta, args.sigma)
         advantage = reward_sample.cuda().float() - reward_map.cuda().float()
 
-        if epoch % 20 == 0:
-            outputs, targets, batch_labels = utils.get_detected_boxes(policy_map, targets, num_windows_fd, base_dir_fd, base_dir_cd, base_dir_gt)
-            metrics += utils_detector.get_batch_statistics(outputs, targets, 0.5)
-            set_labels += batch_labels.tolist()
+        # if epoch % 20 == 0:
+        #     outputs, targets, batch_labels = utils.get_detected_boxes(policy_map, targets, num_windows_fd, base_dir_fd, base_dir_cd, base_dir_gt)
+        #     metrics += utils_detector.get_batch_statistics(outputs, targets, 0.5)
+        #     set_labels += batch_labels.tolist()
 
         # Find the loss for only the policy network
         loss = -distr.log_prob(policy_sample)
@@ -113,12 +114,12 @@ def train(epoch):
 
     reward, sparsity, variance, policy_set = utils.performance_stats(policies, rewards)
 
-    # Compute the Precision and Recall Performance of the Agent and Detectors
-    if epoch % 20 == 0:
-        true_positives, pred_scores, pred_labels = [np.concatenate(x, 0) for x in list(zip(*metrics))]
-        precision, recall, AP, f1, ap_class = utils_detector.ap_per_class(true_positives, pred_scores, pred_labels, set_labels)
-        log_value('train_AP', AP[0], epoch)
-        log_value('train_AR', recall.mean(), epoch)
+    # # Compute the Precision and Recall Performance of the Agent and Detectors
+    # if epoch % 20 == 0:
+    #     true_positives, pred_scores, pred_labels = [np.concatenate(x, 0) for x in list(zip(*metrics))]
+    #     precision, recall, AP, f1, ap_class = utils_detector.ap_per_class(true_positives, pred_scores, pred_labels, set_labels)
+    #     log_value('train_AP', AP[0], epoch)
+    #     log_value('train_AR', recall.mean(), epoch)
 
     print 'Train: %d | Rw: %.2E | S: %.3f | V: %.3f | #: %d'%(epoch, reward, sparsity, variance, len(policy_set))
 
@@ -154,9 +155,8 @@ def test(epoch):
                      # base_dir_fd, base_dir_cd, base_dir_gt, False)
         offset_fd, offset_cd = utils.read_offsets(targets, base_dir_reward_fd, base_dir_reward_cd, num_actions_fine)
 
-        outputs, targets, batch_labels = utils.get_detected_boxes(policy, targets, num_windows_fd, base_dir_fd, base_dir_cd, base_dir_gt)
-        metrics += utils_detector.get_batch_statistics(outputs, targets, 0.5)
-        set_labels += batch_labels.tolist()
+        metrics, set_labels = utils.get_detected_boxes(policy, targets, num_windows_fd, base_dir_fd, base_dir_cd,
+                                        base_dir_gt, metrics, set_labels)
 
         # Find the reward for baseline and sampled policy
         reward = utils.compute_reward(offset_fd, offset_cd, agent_acc, policy.data, args.beta, args.sigma)
@@ -168,7 +168,7 @@ def test(epoch):
     true_positives, pred_scores, pred_labels = [np.concatenate(x, 0) for x in list(zip(*metrics))]
     precision, recall, AP, f1, ap_class = utils_detector.ap_per_class(true_positives, pred_scores, pred_labels, set_labels)
 
-    print 'Test - AP: %.3f | AR : %.3f'%(precision.mean(), recall.mean())
+    print 'Test - AP: %.3f | AR : %.3f'%(AP.mean(), recall.mean())
     reward, sparsity, variance, policy_set = utils.performance_stats(policies, rewards)
 
     print 'Test - Rw: %.2E | S: %.3f | V: %.3f | #: %d'%(reward, sparsity, variance, len(policy_set))
@@ -193,7 +193,7 @@ def test(epoch):
 #--------------------------------------------------------------------------------------------------------#
 trainset, testset = utils.get_dataset(args.model, args.img_size, args.data_dir)
 trainloader = torchdata.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=16)
-testloader = torchdata.DataLoader(testset, batch_size=args.batch_size/2, shuffle=False, num_workers=16)
+testloader = torchdata.DataLoader(testset, batch_size=args.batch_size, shuffle=False, num_workers=8)
 agent = utils.get_model(args.model, num_actions_fine)
 
 # ---- Load the pre-trained model ----------------------
