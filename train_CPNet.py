@@ -42,7 +42,6 @@ parser.add_argument('--img_size', type=int, default=448, help='PN Image Size')
 parser.add_argument('--epoch_step', type=int, default=10000, help='epochs after which lr is decayed')
 parser.add_argument('--max_epochs', type=int, default=10000, help='total epochs to run')
 parser.add_argument('--parallel', action ='store_true', default=False, help='use multiple GPUs for training')
-parser.add_argument('--coarse_level_only', action ='store_true', default=False, help='Two or Single Step')
 parser.add_argument('--penalty', type=float, default=-0.5, help='gamma: reward for incorrect predictions')
 parser.add_argument('--alpha', type=float, default=0.8, help='probability bounding factor')
 parser.add_argument('--beta', type=float, default=0.1, help='Coarse detector increment')
@@ -55,7 +54,7 @@ utils.save_args(__file__, args)
 
 def train(epoch):
     agent.train()
-    matches, rewards, rewards_baseline, policies, metrics, set_labels = [], [], [], [], [], []
+    matches, rewards, rewards_baseline, policies = [], [], [], []
     for batch_idx, (inputs, targets) in tqdm.tqdm(enumerate(trainloader), total=len(trainloader)):
         inputs = Variable(inputs)
         if not args.parallel:
@@ -110,7 +109,6 @@ def train(epoch):
 
 def test(epoch):
     agent.eval()
-
     matches, rewards, metrics, policies, set_labels = [], [], [], [], []
     for batch_idx, (inputs, targets) in tqdm.tqdm(enumerate(testloader), total=len(testloader)):
 
@@ -131,12 +129,7 @@ def test(epoch):
         offset_fd, offset_cd = utils.read_offsets(targets, base_dir_reward_fd, base_dir_reward_cd, num_actions_coarse)
 
         reward = utils.compute_reward(offset_fd, offset_cd, policy.data, args.beta, args.sigma)
-        if args.coarse_level_only:
-            metrics, set_labels = utils.get_detected_boxes_fine(policy, targets, num_windows_cd, base_dir_fd,
-                                base_dir_cd, base_dir_gt, metrics, set_labels)
-        else:
-            metrics, set_labels = utils.get_detected_boxes_coarse(policy, targets, num_windows_cd, num_windows_fd,
-                                base_dir_fd, base_dir_cd, base_dir_gt, metrics, set_labels)
+        metrics, set_labels = utils.get_detected_boxes(policy, targets, metrics, set_labels)
 
         rewards.append(reward)
         policies.append(policy.data)
@@ -166,6 +159,7 @@ def test(epoch):
       'reward': reward,
     }
     torch.save(state, args.cv_dir+'/ckpt_E_%d_R_%.2E'%(epoch, reward))
+    
 #--------------------------------------------------------------------------------------------------------#
 trainset, testset = utils.get_dataset(args.img_size, args.data_dir)
 trainloader = torchdata.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=16)

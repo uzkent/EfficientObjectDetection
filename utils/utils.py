@@ -14,9 +14,10 @@ import utils_detector
 import torch.nn.functional as F
 import time
 from random import randint, sample
+
 from dataset.xView_dataloader import CustomDatasetFromImages
-img_size_cd = 320.
-img_size_fd = 320.
+from constants import base_dir_gt, base_dir_cd, base_dir_fd, base_dir_reward_cd, base_dir_reward_fd
+from constants import num_actions_coarse, num_windows_cd, num_windows_fd, img_size_fd, img_size_cd
 
 def save_args(__file__, args):
     shutil.copy(os.path.basename(__file__), args.cv_dir)
@@ -36,7 +37,7 @@ def xywh2xyxy(x):
     y[:,3] = x[:, 1] + x[:, 3] / 2.
     return y
 
-def get_detected_boxes_coarse(policy, file_dirs, num_windows_cd, num_windows_fd, base_dir_fd, base_dir_cd, base_dir_gt, metrics, set_labels):
+def get_detected_boxes(policy, file_dirs, metrics, set_labels):
     for index, file_dir_st in enumerate(file_dirs):
          counter, outputs_img = 0, np.zeros((1,7))
          for xind in range(num_windows_cd):
@@ -68,39 +69,6 @@ def get_detected_boxes_coarse(policy, file_dirs, num_windows_cd, num_windows_fd,
                          else:
                              continue
                  counter += 1
-
-    return metrics, set_labels
-
-def get_detected_boxes_fine(policy, file_dirs, num_windows, base_dir_fd, base_dir_cd, base_dir_gt, metrics, set_labels)
-    for index, file_dir_st in enumerate(file_dirs):
-         counter = -1
-         for xind in range(num_windows):
-             for yind in range(num_windows):
-                 # ---------------- Read Ground Truth -----------------------------
-                 counter += 1
-                 outputs_all = []
-                 gt_path = '{}{}_{}_{}.txt'.format(base_dir_gt, file_dir_st, str(xind), str(yind))
-                 if os.path.exists(gt_path):
-                     gt_temp = np.loadtxt(gt_path).reshape([-1, 5])
-                     targets = np.hstack((np.zeros((gt_temp.shape[0], 1)), gt_temp))
-                     targets[:, 2:] = xywh2xyxy(targets[:, 2:])
-                     # ---------------- Read Detections -------------------------------
-                     if policy[index, counter] == 1:
-                         targets[:, 2:] *= img_size_fd
-                         preds_dir = '{}{}_{}_{}'.format(base_dir_fd, file_dir_st, str(xind), str(yind))
-                         if os.path.exists(preds_dir):
-                             preds = np.loadtxt(preds_dir).reshape([-1,7])
-                             outputs_all.append(torch.from_numpy(preds))
-                     else:
-                         targets[:, 2:] *= img_size_cd
-                         preds_dir = '{}{}_{}_{}_ds1'.format(base_dir_cd, file_dir_st, str(xind), str(yind))
-                         if os.path.exists(preds_dir):
-                             preds = np.loadtxt(preds_dir).reshape([-1,7])
-                             outputs_all.append(torch.from_numpy(preds))
-                     metrics += utils_detector.get_batch_statistics(outputs_all, torch.from_numpy(targets), 0.5)
-                     set_labels += targets[:, 1].tolist()
-                 else:
-                     continue
 
     return metrics, set_labels
 
@@ -213,13 +181,9 @@ def agent_chosen_input(input_org, policy, mappings, interval):
 
     return input_org.cuda()
 
-def action_space_model(dset, fine=True):
-    if fine:
-        img_size = 175
-        interval = 55
-    else:
-        img_size = 112
-        interval = 56
+def action_space_model(fine=True):
+    img_size = 175
+    interval = 55
     # Model the action space by dividing the image space into equal size patches
     mappings = []
     for cl in range(0, img_size, interval):
@@ -227,7 +191,6 @@ def action_space_model(dset, fine=True):
             mappings.append([cl, rw])
 
     return mappings, img_size, interval
-
 
 def get_dataset(img_size, root='data/'):
     transform_train, transform_test = get_transforms(img_size)
