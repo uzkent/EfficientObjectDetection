@@ -90,6 +90,15 @@ To visualize the training and test steps in tensorboard, use the following comma
   tensorboard --logdir=cv_dir/logs/
 ```
 
+You can cite our paper as:
+```
+@article{uzkent2019efficient,
+  title={Efficient Object Detection in Large Images using Deep Reinforcement Learning},
+  author={Uzkent, Burak and Yeh, Christopher and Ermon, Stefano},
+  journal={arXiv preprint arXiv:1912.03966},
+  year={2019}
+}
+```
 [TODO] Write **test.py** script to test the Policy Network and visualize the policies.
 
 [TODO] Add more details into **README** file.
