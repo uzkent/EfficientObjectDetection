@@ -9,7 +9,7 @@ Images with Deep Reinforcement Learning. The arxiv version of the paper can be f
 ### Training Object Detectors
 We train two different detectors: (1) **Fine level** object detector and (2) **Coarse level** object detector. To parameterize
 the detectors, we use the YOLO-v3 network, however, you can use a detector of your choice. We use [this repository](https://github.com/eriklindernoren/PyTorch-YOLOv3) to train the
-fine and coarse level detectors. In the paper, we use 320x320px and 64x64px images to train the fine and coarse level detectors. The coarse images represented with 64x64 px is the downsampled version of the high resolution images represented with 320x320 px. Each image ideally should represent a window of the large images that we process for object detection.
+fine and coarse level detectors. In the paper, we use **320x320**px and **64x64**px images to train the fine and coarse level detectors. The coarse images represented with **64x64**px is the downsampled version of the high resolution images represented with 320x320 px. Each image ideally should represent a window of the large images that we process for object detection.
 
 ### Testing Object Detectors
 Once we train the object detectors, we run them on the training and testing images for the Policy Network. **The large training images for the Policy Network should be different than the training images for the object detectors since the object detectors perform much better on the seen images**. Next, we run the coarse and fine level detectors on the windows from the large images and save the unnormalized bounding boxes into a numpy array as
@@ -80,7 +80,7 @@ Finally, we should enter the directories of the folders created in this section 
 ```
 
 ## Training the Policy Network
-In the next step, we train the Policy Network and test the policy network. First, we need to have large training and test images. In the paper, we perform experiments on the xView and Caltech-Pedestrian Detection datasets. By a large image, we refer to images that have more than **1000px** in each dimension. We need to list the training and test large images in a csv file as follows.
+In the next step, we train the Policy Network and test the policy network. First, we need to have large training and test images. In the paper, we use ResNet34 to parameterize the Policy Network, however, you can try a shallower network such as ResNet18. We perform experiments on the xView and Caltech-Pedestrian Detection datasets. By a large image, we refer to images that have more than **1000px** in each dimension. We need to list the training and test large images in a csv file as follows.
 ```
   image name, location
   xxxxx.jpg, /path/to/folder/xxxxx.jpg
