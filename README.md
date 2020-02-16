@@ -99,6 +99,8 @@ You can cite our paper as:
   year={2019}
 }
 ```
+For questions or comments, please contact me at **uzkent.burak@gmail.com**
+
 [TODO] Write **test.py** script to test the Policy Network and visualize the policies.
 
 [TODO] Add more details into **README** file.
