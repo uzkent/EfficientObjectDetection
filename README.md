@@ -30,7 +30,7 @@ Once we train the object detectors, we run them on the training and testing imag
     ...
     ...
   ```
-Each numpy array needs to be saved in the following format into the coarse or fine detector folder as:
+Each numpy array needs to be saved into the coarse or fine detector folder in the following format:
 ```
   '{}_{}_{}.npy'.format(image_name, x index of the window, y index of the window)
 ```
