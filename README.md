@@ -14,7 +14,7 @@ fine and coarse level detectors. In the paper, we use 320x320px and 64x64px imag
 ### Testing Object Detectors
 Once we train the object detectors, we run them on the training and testing images for the Policy Network. **The large training images for the Policy Network should be different than the training images for the object detectors since the object detectors perform much better on the seen images**. Next, we run the coarse and fine level detectors on the windows from the large images and save the unnormalized bounding boxes into a numpy array as
 
-    - Fine Detector:
+  - Fine Detector:
   ```
     x_topleft, y_topleft, x_bottomright, y_bottomright, objectness score, confidence, class
     211.20288  100.87493  220.11127  114.58396    0.99493    0.99999    1.00000
