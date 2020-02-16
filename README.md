@@ -11,11 +11,13 @@ We train two different detectors: (1) **Fine level** object detector and (2) **C
 the detectors, we use the YOLO-v3 network, however, you can use a detector of your choice. We use [this repository](https://github.com/eriklindernoren/PyTorch-YOLOv3) to train the
 fine and coarse level detectors. In the paper, we use 320x320px and 64x64px images to train the fine and coarse level detectors. The coarse images represented with 64x64 px is the downsampled version of the high resolution images represented with 320x320 px. Each image ideally should represent a window of the large images that we process for object detection.
 
-
 ### Testing Object Detectors
-Once we train the object detectors, we run them on the training and testing images for the Policy Network. **The large training images for the Policy Network should be different than the training images for the object detectors since the object detectors perform much better on the seen images**. Next, we run the coarse and fine level detectors on the windows from the large images and save the normalized bounding boxes ([0,1]) into a numpy array as:
+Once we train the object detectors, we run them on the training and testing images for the Policy Network. **The large training images for the Policy Network should be different than the training images for the object detectors since the object detectors perform much better on the seen images**. Next, we run the coarse and fine level detectors on the windows from the large images and save the unnormalized bounding boxes into a numpy array as:
 ```
-  x_center, y_center, width, height, objectness score, class
+  x_topleft, y_topleft, x_bottomright, y_bottomright, objectness score, confidence, class
+  211.20288  100.87493  220.11127  114.58396    0.99493    0.99999    1.00000
+  228.52379  100.65227  235.81398  115.50450    0.98328    0.99998    1.00000
+  ...
   ...
 ```
 Each numpy array needs to be saved in the following format:
@@ -73,7 +75,7 @@ In the next step, we train the Policy Network and test the policy network. First
   image name, location
   xxxxx.jpg, /path/to/folder/xxxxx.jpg
 ```
-Training and test csv files can be saved as *train.csv* and *val.csv* into the *./data/dataset/* folder.
+Training and test csv files can be saved as *train.csv* and *val.csv* into the *./data/your_dataset/* folder.
 
 Next, we train the Policy Network as follows.
 ```
