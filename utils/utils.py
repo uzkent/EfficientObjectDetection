@@ -136,7 +136,7 @@ def set_parameter_requires_grad(model, feature_extracting):
             param.requires_grad = False
 
 def get_model(num_output):
-    agent = torchmodels.resnet34(pretrained=True)
+    agent = torchmodels.resnet18(pretrained=True)
     set_parameter_requires_grad(agent, False)
     num_ftrs = agent.fc.in_features
     agent.fc = torch.nn.Linear(num_ftrs, num_output)
