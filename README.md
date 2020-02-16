@@ -12,7 +12,8 @@ the detectors, we use the YOLO-v3 network, however, you can use a detector of yo
 fine and coarse level detectors. In the paper, we use 320x320px and 64x64px images to train the fine and coarse level detectors. The coarse images represented with 64x64 px is the downsampled version of the high resolution images represented with 320x320 px. Each image ideally should represent a window of the large images that we process for object detection.
 
 ### Testing Object Detectors
-Once we train the object detectors, we run them on the training and testing images for the Policy Network. **The large training images for the Policy Network should be different than the training images for the object detectors since the object detectors perform much better on the seen images**. Next, we run the coarse and fine level detectors on the windows from the large images and save the unnormalized bounding boxes into a numpy array as:
+Once we train the object detectors, we run them on the training and testing images for the Policy Network. **The large training images for the Policy Network should be different than the training images for the object detectors since the object detectors perform much better on the seen images**. Next, we run the coarse and fine level detectors on the windows from the large images and save the unnormalized bounding boxes into a numpy array as
+
     - Fine Detector:
   ```
     x_topleft, y_topleft, x_bottomright, y_bottomright, objectness score, confidence, class
