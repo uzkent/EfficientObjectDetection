@@ -20,9 +20,9 @@ class CustomDatasetFromImages(Dataset):
         self.transforms = transform
         # Read the csv file
         data_info = pd.read_csv(csv_path, header=None)
-        # First column contains the image paths
+        # Second column is the image paths
         self.image_arr = np.asarray(data_info.iloc[:, 1])
-        # Second column is the labels
+        # First column is the image IDs
         self.label_arr = np.asarray(data_info.iloc[:, 0])
         # Calculate len
         self.data_len = len(data_info)
