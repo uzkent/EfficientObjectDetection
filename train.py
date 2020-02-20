@@ -9,12 +9,10 @@ How to train the Policy Network :
 """
 import os
 import torch
-import torch.autograd as autograd
 import torch.utils.data as torchdata
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-import random
 import tqdm
 import torch.optim as optim
 import torch.backends.cudnn as cudnn
@@ -22,11 +20,11 @@ cudnn.benchmark = True
 import argparse
 from torch.autograd import Variable
 from tensorboard_logger import configure, log_value
-from torch.distributions import Multinomial, Bernoulli
+from torch.distributions import Bernoulli
 
 from utils import utils, utils_detector
-from constants import base_dir_groundtruth, base_dir_detections_cd, base_dir_detections_fd, base_dir_metric_cd, base_dir_metric_fd
-from constants import num_actions, num_windows
+from constants import base_dir_metric_cd, base_dir_metric_fd
+from constants import num_actions
 
 parser = argparse.ArgumentParser(description='PolicyNetworkTraining')
 parser.add_argument('--lr', type=float, default=1e-3, help='learning rate')
@@ -38,7 +36,7 @@ parser.add_argument('--img_size', type=int, default=448, help='PN Image Size')
 parser.add_argument('--epoch_step', type=int, default=10000, help='epochs after which lr is decayed')
 parser.add_argument('--max_epochs', type=int, default=10000, help='total epochs to run')
 parser.add_argument('--num_workers', type=int, default=8, help='Number of Workers')
-parser.add_argument('--parallel', action ='store_true', default=False, help='use multiple GPUs for training')
+parser.add_argument('--parallel', action='store_true', default=False, help='use multiple GPUs for training')
 parser.add_argument('--alpha', type=float, default=0.8, help='probability bounding factor')
 parser.add_argument('--beta', type=float, default=0.1, help='Coarse detector increment')
 parser.add_argument('--sigma', type=float, default=0.5, help='cost for patch use')
@@ -50,11 +48,11 @@ utils.save_args(__file__, args)
 
 def train(epoch):
     agent.train()
-    matches, rewards, rewards_baseline, policies = [], [], [], []
+    rewards, rewards_baseline, policies = [], [], []
     for batch_idx, (inputs, targets) in tqdm.tqdm(enumerate(trainloader), total=len(trainloader)):
         inputs = Variable(inputs)
         if not args.parallel:
-    	    inputs = inputs.cuda()
+            inputs = inputs.cuda()
 
         # Actions by the Agent
         probs = F.sigmoid(agent.forward(inputs))
@@ -75,7 +73,7 @@ def train(epoch):
         offset_fd, offset_cd = utils.read_offsets(targets, num_actions)
 
         # Find the reward for baseline and sampled policy
-        reward_map = utils.compute_reward(offset_fd, offset_cd, , policy_map.data, args.beta, args.sigma)
+        reward_map = utils.compute_reward(offset_fd, offset_cd, policy_map.data, args.beta, args.sigma)
         reward_sample = utils.compute_reward(offset_fd, offset_cd, policy_sample.data, args.beta, args.sigma)
         advantage = reward_sample.cuda().float() - reward_map.cuda().float()
 
@@ -95,7 +93,7 @@ def train(epoch):
     reward, sparsity, variance, policy_set = utils.performance_stats(policies, rewards)
 
     # Compute the Precision and Recall Performance of the Agent and Detectors
-    print 'Train: %d | Rw: %.2E | S: %.3f | V: %.3f | #: %d'%(epoch, reward, sparsity, variance, len(policy_set))
+    print('Train: %d | Rw: %.2E | S: %.3f | V: %.3f | #: %d' % (epoch, reward, sparsity, variance, len(policy_set)))
 
     log_value('train_reward', reward, epoch)
     log_value('train_sparsity', sparsity, epoch)
@@ -105,7 +103,7 @@ def train(epoch):
 
 def test(epoch):
     agent.eval()
-    matches, rewards, metrics, policies, set_labels = [], [], [], [], []
+    rewards, metrics, policies, set_labels = [], [], [], []
     for batch_idx, (inputs, targets) in tqdm.tqdm(enumerate(testloader), total=len(testloader)):
 
         inputs = Variable(inputs, volatile=True)
@@ -134,10 +132,10 @@ def test(epoch):
     true_positives, pred_scores, pred_labels = [np.concatenate(x, 0) for x in list(zip(*metrics))]
     precision, recall, AP, f1, ap_class = utils_detector.ap_per_class(true_positives, pred_scores, pred_labels, set_labels)
 
-    print 'Test - AP: %.3f | AR : %.3f'%(AP[0], recall.mean())
+    print('Test - AP: %.3f | AR : %.3f' % (AP[0], recall.mean()))
     reward, sparsity, variance, policy_set = utils.performance_stats(policies, rewards)
 
-    print 'Test - Rw: %.2E | S: %.3f | V: %.3f | #: %d'%(reward, sparsity, variance, len(policy_set))
+    print('Test - Rw: %.2E | S: %.3f | V: %.3f | #: %d' % (reward, sparsity, variance, len(policy_set)))
 
     log_value('test_reward', reward, epoch)
     log_value('test_AP', AP[0], epoch)
@@ -168,7 +166,7 @@ if args.load is not None:
     checkpoint = torch.load(args.load)
     agent.load_state_dict(checkpoint['agent'])
     start_epoch = checkpoint['epoch'] + 1
-    print 'loaded agent from', args.load
+    print('loaded agent from %s' % args.load)
 
 # Parallelize the models if multiple GPUs available - Important for Large Batch Size
 if args.parallel:
@@ -180,7 +178,7 @@ optimizer = optim.Adam(agent.parameters(), lr=args.lr)
 
 # Save the args to the checkpoint directory
 configure(args.cv_dir+'/log', flush_secs=5)
-for epoch in range(start_epoch, start_epocH+args.max_epochs+1):
+for epoch in range(start_epoch, start_epoch+args.max_epochs+1):
     train(epoch)
     if epoch % 10 == 0:
         test(epoch)

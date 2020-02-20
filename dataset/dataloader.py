@@ -19,13 +19,13 @@ class CustomDatasetFromImages(Dataset):
         # Transforms
         self.transforms = transform
         # Read the csv file
-        self.data_info = pd.read_csv(csv_path, header=None)
+        data_info = pd.read_csv(csv_path, header=None)
         # First column contains the image paths
-        self.image_arr = np.asarray(self.data_info.iloc[:, 1])
+        self.image_arr = np.asarray(data_info.iloc[:, 1])
         # Second column is the labels
-        self.label_arr = np.asarray(self.data_info.iloc[:, 0])
+        self.label_arr = np.asarray(data_info.iloc[:, 0])
         # Calculate len
-        self.data_len = len(self.data_info.index)
+        self.data_len = len(data_info)
 
     def __getitem__(self, index):
         # Get image name from the pandas df
