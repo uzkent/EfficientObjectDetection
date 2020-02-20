@@ -54,29 +54,32 @@ Finally, we should enter the directories of the folders created in this section 
    ├── base_dir_detections_fd
              image1_0_0.npy
              image1_0_1.npy
-             .
-             .
-             .
-             image1_0_1.npy
+             ...
+             imageN_0_0.npy
+             imageN_0_1.npy
+             ...
    ├── base_dir_detections_cd
              image1_0_0.npy
              image1_0_1.npy
-             .
-             .
-             .
-             image1_0_1.npy
+             ...
+             imageN_0_0.npy
+             imageN_0_1.npy
+             ...
    ├── base_dir_groundtruth
              image1_0_0.npy
              image1_0_1.npy
-             .
-             .
-             .
-             image1_0_1.npy
+             ...
+             imageN_0_0.npy
+             imageN_0_1.npy
+             ...
    ├── base_dir_metric_fd
              image1.npy
-             .
-             .
-             .
+             ...
+             imageN.npy
+   ├── base_dir_metric_cd
+             image1.npy
+             ...
+             imageN.npy
 ```
 
 ## Training the Policy Network
