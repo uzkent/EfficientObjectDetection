@@ -36,6 +36,7 @@ parser.add_argument('--img_size', type=int, default=448, help='PN Image Size')
 parser.add_argument('--epoch_step', type=int, default=10000, help='epochs after which lr is decayed')
 parser.add_argument('--max_epochs', type=int, default=10000, help='total epochs to run')
 parser.add_argument('--num_workers', type=int, default=8, help='Number of Workers')
+parser.add_argument('--test_epoch', type=int, default=10, help='At every N epoch test the network')
 parser.add_argument('--parallel', action='store_true', default=False, help='use multiple GPUs for training')
 parser.add_argument('--alpha', type=float, default=0.8, help='probability bounding factor')
 parser.add_argument('--beta', type=float, default=0.1, help='Coarse detector increment')
@@ -180,5 +181,5 @@ optimizer = optim.Adam(agent.parameters(), lr=args.lr)
 configure(args.cv_dir+'/log', flush_secs=5)
 for epoch in range(start_epoch, start_epoch+args.max_epochs+1):
     train(epoch)
-    if epoch % 10 == 0:
+    if epoch % args.test_epoch == 0:
         test(epoch)
