@@ -45,6 +45,11 @@ Additionally, we save the mAR values for each window of the large image as follo
 ```
 The matrix is then saved into a numpy file in the following format: ``'{}{}.format(image_name, detector_type)'``. If your application prioritizes precision over recall, you can use mAP values to train the Policy Network.
 
+Next, we save the ground truth for each image, i.e. *image1_0_0*, in a text file into the directory *./data/your_dataset/basedir_groundtruth/image1_0_0.txt*. The bounding box coordinates scaled to [0,1] and label should be written as follows:
+```
+label_idx x_center y_center width height
+```
+
 Finally, we should enter the directories of the folders created in this section into the *constants.py* file.
 
 ```
