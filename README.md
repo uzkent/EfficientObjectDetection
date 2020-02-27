@@ -34,7 +34,7 @@ Each numpy array needs to be saved into the coarse or fine detector folder in th
 ```
   '{}_{}_{}.npy'.format(image_name, x index of the window, y index of the window)
 ```
-The numpy arrays for the fine and coarse level detectors should be saved into two different folders.
+The numpy arrays for the fine and coarse level detectors should be saved into two different folders (see the hierarchy below).
 
 Additionally, we save the mAR values for each window of the large image as follows:
 ```
@@ -50,7 +50,7 @@ Next, we save the ground truth for each image, i.e. *image1_0_0*, in a text file
 label_idx x_center y_center width height
 ```
 
-Finally, we should enter the directories of the folders created in this section into the *constants.py* file.
+Finally, we should enter the directories of the folders created in this section into the *constants.py* file. Your hierarchy of folders should follow a format similar to the one below.
 
 ```
 ├── ./data/your_dataset/
@@ -88,7 +88,7 @@ Finally, we should enter the directories of the folders created in this section 
 ```
 
 ## Training the Policy Network
-In the next step, we train the Policy Network and test the policy network. First, we need to have large training and test images. In the paper, we use ResNet34 to parameterize the Policy Network, however, you can try a shallower network such as ResNet18. We perform experiments on the xView and Caltech-Pedestrian Detection datasets. By a large image, we refer to images that have more than **1000px** in each dimension. We need to list the training and test large images in a csv file as follows.
+In the next step, we train the Policy Network. In the paper, we use ResNet34 to parameterize the Policy Network, however, you can try a shallower network such as ResNet18. We perform experiments on the xView and Caltech-Pedestrian Detection datasets. By a large image, we refer to images that have more than **1000px** in each dimension. We need to list the training and test large images in a csv file as follows.
 ```
   image name, location
   xxxxx, /path/to/folder/xxxxx.jpg
@@ -110,7 +110,7 @@ To visualize the training and test steps in tensorboard, use the following comma
   tensorboard --logdir=cv_dir/logs/
 ```
 
-You can cite our paper as:
+Finally, you can cite our paper as:
 ```
 @article{uzkent2019efficient,
   title={Efficient Object Detection in Large Images using Deep Reinforcement Learning},
@@ -119,7 +119,7 @@ You can cite our paper as:
   year={2019}
 }
 ```
-For questions or comments, please contact me at **uzkent.burak@gmail.com**
+For questions or comments, please send an e-mail to **uzkent.burak@gmail.com** or use the issue tab in github.
 
 [TODO] Write **test.py** script to test the Policy Network and visualize the policies.
 
