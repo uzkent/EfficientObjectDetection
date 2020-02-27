@@ -120,7 +120,7 @@ def test(epoch):
         policy = Variable(policy)
 
         # Compute the Batch-wise metrics
-        offset_fd, offset_cd = utils.read_offsets(targets, base_dir_metric_fd, base_dir_metric_cd, num_actions)
+        offset_fd, offset_cd = utils.read_offsets(targets, num_actions)
 
         reward = utils.compute_reward(offset_fd, offset_cd, policy.data, args.beta, args.sigma)
         metrics, set_labels = utils.get_detected_boxes(policy, targets, metrics, set_labels)

@@ -5,7 +5,7 @@ import torchvision.models as torchmodels
 import numpy as np
 import shutil
 import json
-import utils_detector
+from utils import utils_detector
 
 from dataset.dataloader import CustomDatasetFromImages
 from constants import base_dir_groundtruth, base_dir_detections_cd, base_dir_detections_fd, base_dir_metric_cd, base_dir_metric_fd
@@ -29,6 +29,7 @@ def xywh2xyxy(x):
     y[:,3] = x[:, 1] + x[:, 3] / 2.
     return y
 
+import pdb
 def get_detected_boxes(policy, file_dirs, metrics, set_labels):
     for index, file_dir_st in enumerate(file_dirs):
         counter = 0
@@ -36,20 +37,21 @@ def get_detected_boxes(policy, file_dirs, metrics, set_labels):
             for yind in range(num_windows):
                 # ---------------- Read Ground Truth ----------------------------------
                 outputs_all = []
-                gt_path = '{}{}_{}_{}_{}_{}.txt'.format(base_dir_groundtruth, file_dir_st, xind, yind)
+                pdb.set_trace()
+                gt_path = '{}/{}_{}_{}.txt'.format(base_dir_groundtruth, file_dir_st, xind, yind)
                 if os.path.exists(gt_path):
                     gt = np.loadtxt(gt_path).reshape([-1, 5])
                     targets = np.hstack((np.zeros((gt.shape[0], 1)), gt))
                     targets[:, 2:] = xywh2xyxy(targets[:, 2:])
                     # ----------------- Read Detections -------------------------------
                     if policy[index, counter] == 1:
-                        preds_dir = '{}{}_{}_{}_{}_{}'.format(base_dir_detections_fd, file_dir_st, xind, yind)
+                        preds_dir = '{}/{}_{}_{}'.format(base_dir_detections_fd, file_dir_st, xind, yind)
                         targets[:, 2:] *= img_size_fd
                         if os.path.exists(preds_dir):
                             preds = np.loadtxt(preds_dir).reshape([-1,7])
                             outputs_all.append(torch.from_numpy(preds))
                     else:
-                        preds_dir = '{}{}_{}_{}_{}_{}'.format(base_dir_detections_cd, file_dir_st, xind, yind)
+                        preds_dir = '{}/{}_{}_{}'.format(base_dir_detections_cd, file_dir_st, xind, yind)
                         targets[:, 2:] *= img_size_cd
                         if os.path.exists(preds_dir):
                             preds = np.loadtxt(preds_dir).reshape([-1,7])
@@ -66,8 +68,8 @@ def read_offsets(image_ids, num_actions):
     offset_fd = torch.zeros((len(image_ids), num_actions)).cuda()
     offset_cd = torch.zeros((len(image_ids), num_actions)).cuda()
     for index, img_id in enumerate(image_ids):
-        offset_fd[index, :] = torch.from_numpy(np.loadtxt('{}{}'.format(base_dir_metric_fd, img_id)).flatten())
-        offset_cd[index, :] = torch.from_numpy(np.loadtxt('{}{}'.format(base_dir_metric_cd, img_id)).flatten())
+        offset_fd[index, :] = torch.from_numpy(np.loadtxt('{}/{}'.format(base_dir_metric_fd, img_id)).flatten())
+        offset_cd[index, :] = torch.from_numpy(np.loadtxt('{}/{}'.format(base_dir_metric_cd, img_id)).flatten())
 
     return offset_fd, offset_cd
 
@@ -124,8 +126,8 @@ def get_transforms(img_size):
 
 def get_dataset(img_size, root='data/'):
     transform_train, transform_test = get_transforms(img_size)
-    trainset = CustomDatasetFromImages(root+'train.csv', transform_train)
-    testset = CustomDatasetFromImages(root+'valid.csv', transform_test)
+    trainset = CustomDatasetFromImages(root+'debug.csv', transform_train)
+    testset = CustomDatasetFromImages(root+'debug.csv', transform_test)
 
     return trainset, testset
 
