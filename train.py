@@ -93,7 +93,6 @@ def train(epoch):
 
     reward, sparsity, variance, policy_set = utils.performance_stats(policies, rewards)
 
-    # Compute the Precision and Recall Performance of the Agent and Detectors
     print('Train: %d | Rw: %.2E | S: %.3f | V: %.3f | #: %d' % (epoch, reward, sparsity, variance, len(policy_set)))
 
     log_value('train_reward', reward, epoch)
@@ -120,7 +119,6 @@ def test(epoch):
         policy[policy>=0.5] = 1.0
         policy = Variable(policy)
 
-        # Compute the Batch-wise metrics
         offset_fd, offset_cd = utils.read_offsets(targets, num_actions)
 
         reward = utils.compute_reward(offset_fd, offset_cd, policy.data, args.beta, args.sigma)
@@ -129,13 +127,11 @@ def test(epoch):
         rewards.append(reward)
         policies.append(policy.data)
 
-    # Compute the Precision and Recall Performance of the Agent and Detectors
     true_positives, pred_scores, pred_labels = [np.concatenate(x, 0) for x in list(zip(*metrics))]
     precision, recall, AP, f1, ap_class = utils_detector.ap_per_class(true_positives, pred_scores, pred_labels, set_labels)
-
-    print('Test - AP: %.3f | AR : %.3f' % (AP[0], recall.mean()))
     reward, sparsity, variance, policy_set = utils.performance_stats(policies, rewards)
-
+    
+    print('Test - AP: %.3f | AR : %.3f' % (AP[0], recall.mean()))
     print('Test - Rw: %.2E | S: %.3f | V: %.3f | #: %d' % (reward, sparsity, variance, len(policy_set)))
 
     log_value('test_reward', reward, epoch)
@@ -147,7 +143,6 @@ def test(epoch):
 
     # save the model --- agent
     agent_state_dict = agent.module.state_dict() if args.parallel else agent.state_dict()
-
     state = {
       'agent': agent_state_dict,
       'epoch': epoch,
@@ -169,7 +164,7 @@ if args.load is not None:
     start_epoch = checkpoint['epoch'] + 1
     print('loaded agent from %s' % args.load)
 
-# Parallelize the models if multiple GPUs available - Important for Large Batch Size
+# Parallelize the models if multiple GPUs available - Important for Large Batch Size to Reduce Variance
 if args.parallel:
     agent = nn.DataParallel(agent)
 agent.cuda()
@@ -179,6 +174,8 @@ optimizer = optim.Adam(agent.parameters(), lr=args.lr)
 
 # Save the args to the checkpoint directory
 configure(args.cv_dir+'/log', flush_secs=5)
+
+# Start training and testing
 for epoch in range(start_epoch, start_epoch+args.max_epochs+1):
     train(epoch)
     if epoch % args.test_epoch == 0:
