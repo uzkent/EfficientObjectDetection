@@ -91,7 +91,7 @@ Finally, we should enter the directories of the folders created in this section 
 In the next step, we train the Policy Network and test the policy network. First, we need to have large training and test images. In the paper, we use ResNet34 to parameterize the Policy Network, however, you can try a shallower network such as ResNet18. We perform experiments on the xView and Caltech-Pedestrian Detection datasets. By a large image, we refer to images that have more than **1000px** in each dimension. We need to list the training and test large images in a csv file as follows.
 ```
   image name, location
-  xxxxx.jpg, /path/to/folder/xxxxx.jpg
+  xxxxx, /path/to/folder/xxxxx.jpg
 ```
 Training and test csv files can be saved as *train.csv* and *val.csv* into the *./data/your_dataset/* folder.
 
