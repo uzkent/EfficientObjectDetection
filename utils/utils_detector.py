@@ -7,7 +7,6 @@ import numpy as np
 def to_cpu(tensor):
     return tensor.detach().cpu()
 
-
 def load_classes(path):
     """
     Loads class labels at 'path'
@@ -15,16 +14,6 @@ def load_classes(path):
     fp = open(path, "r")
     names = fp.read().split("\n")[:-1]
     return names
-
-
-def weights_init_normal(m):
-    classname = m.__class__.__name__
-    if classname.find("Conv") != -1:
-        torch.nn.init.normal_(m.weight.data, 0.0, 0.02)
-    elif classname.find("BatchNorm2d") != -1:
-        torch.nn.init.normal_(m.weight.data, 1.0, 0.02)
-        torch.nn.init.constant_(m.bias.data, 0.0)
-
 
 def rescale_boxes(boxes, current_dim, original_shape):
     """ Rescales bounding boxes to the original shape """
@@ -42,7 +31,6 @@ def rescale_boxes(boxes, current_dim, original_shape):
     boxes[:, 3] = ((boxes[:, 3] - pad_y // 2) / unpad_h) * orig_h
     return boxes
 
-
 def xywh2xyxy(x):
     y = x.new(x.shape)
     y[..., 0] = x[..., 0] - x[..., 2] / 2
@@ -50,7 +38,6 @@ def xywh2xyxy(x):
     y[..., 2] = x[..., 0] + x[..., 2] / 2
     y[..., 3] = x[..., 1] + x[..., 3] / 2
     return y
-
 
 def ap_per_class(tp, conf, pred_cls, target_cls):
     """ Compute the average precision, given the recall and precision curves.
@@ -105,7 +92,6 @@ def ap_per_class(tp, conf, pred_cls, target_cls):
     f1 = 2 * p * r / (p + r + 1e-16)
 
     return p, r, ap, f1, unique_classes.astype("int32")
-
 
 def ar_per_class(tp, conf, pred_cls, target_cls):
     """ Compute the average precision, given the recall and precision curves.
@@ -177,7 +163,6 @@ def compute_ap(recall, precision):
     ap = np.sum((mrec[i + 1] - mrec[i]) * mpre[i + 1])
     return ap
 
-
 def get_batch_statistics(outputs, targets, iou_threshold):
     """ Compute true positives, predicted scores and predicted labels per sample """
     batch_metrics = []
@@ -216,7 +201,6 @@ def get_batch_statistics(outputs, targets, iou_threshold):
         batch_metrics.append([true_positives, pred_scores, pred_labels])
     return batch_metrics
 
-
 def bbox_wh_iou(wh1, wh2):
     wh2 = wh2.t()
     w1, h1 = wh1[0], wh1[1]
@@ -224,7 +208,6 @@ def bbox_wh_iou(wh1, wh2):
     inter_area = torch.min(w1, w2) * torch.min(h1, h2)
     union_area = (w1 * h1 + 1e-16) + w2 * h2 - inter_area
     return inter_area / union_area
-
 
 def bbox_iou(box1, box2, x1y1x2y2=True):
     """
@@ -257,7 +240,6 @@ def bbox_iou(box1, box2, x1y1x2y2=True):
     iou = inter_area / (b1_area + b2_area - inter_area + 1e-16)
 
     return iou
-
 
 def non_max_suppression(prediction, conf_thres=0.5, nms_thres=0.4):
     """
@@ -298,7 +280,6 @@ def non_max_suppression(prediction, conf_thres=0.5, nms_thres=0.4):
             output[image_i] = torch.stack(keep_boxes)
 
     return output
-
 
 def build_targets(pred_boxes, pred_cls, target, anchors, ignore_thres):
 
