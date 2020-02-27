@@ -29,7 +29,6 @@ def xywh2xyxy(x):
     y[:,3] = x[:, 1] + x[:, 3] / 2.
     return y
 
-import pdb
 def get_detected_boxes(policy, file_dirs, metrics, set_labels):
     for index, file_dir_st in enumerate(file_dirs):
         counter = 0
@@ -37,7 +36,6 @@ def get_detected_boxes(policy, file_dirs, metrics, set_labels):
             for yind in range(num_windows):
                 # ---------------- Read Ground Truth ----------------------------------
                 outputs_all = []
-                pdb.set_trace()
                 gt_path = '{}/{}_{}_{}.txt'.format(base_dir_groundtruth, file_dir_st, xind, yind)
                 if os.path.exists(gt_path):
                     gt = np.loadtxt(gt_path).reshape([-1, 5])
