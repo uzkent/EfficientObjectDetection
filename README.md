@@ -1,7 +1,7 @@
 # Efficient Object Detection in Large Images with Deep Reinforcement Learning
 
 This repository contains PyTorch implementation of our IEEE WACV20 paper on Efficient Object Detection in Large
-Images with Deep Reinforcement Learning. The arxiv version of the paper can be found [here](http://openaccess.thecvf.com/content_WACV_2020/papers/Uzkent_Efficient_Object_Detection_in_Large_Images_Using_Deep_Reinforcement_Learning_WACV_2020_paper.pdf).
+Images with Deep Reinforcement Learning. Our paper can be found [here](http://openaccess.thecvf.com/content_WACV_2020/papers/Uzkent_Efficient_Object_Detection_in_Large_Images_Using_Deep_Reinforcement_Learning_WACV_2020_paper.pdf).
 
 <img src="./figures/framework.png" alt="WAMI_Positives" style="width: 200p;"/>
 
