@@ -121,7 +121,3 @@ Finally, you can cite our paper as:
 }
 ```
 For questions or comments, please send an e-mail to **uzkent.burak@gmail.com** or use the issue tab in github.
-
-[TODO] Write **test.py** script to test the Policy Network and visualize the policies.
-
-[TODO] Add more details into **README** file.
